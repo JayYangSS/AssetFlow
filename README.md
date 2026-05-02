@@ -9,6 +9,11 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 Copy-Item .env.example .env
+```
+
+After the API entry point task adds `assetflow/main.py`, run:
+
+```powershell
 uvicorn assetflow.main:app --host 0.0.0.0 --port 8787
 ```
 
