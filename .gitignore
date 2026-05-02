@@ -1,1 +1,15 @@
+.env
+.venv/
 .worktrees/
+__pycache__/
+.pytest_cache/
+.pytest-tmp/
+pytest-cache-files-*/
+*.pyc
+assetflow.egg-info/
+data/
+exports/
+uploads/
+*.db
+*.sqlite
+*.xlsx.tmp
