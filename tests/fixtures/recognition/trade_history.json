@@ -1,0 +1,26 @@
+{
+  "screenshot_type": "trade_history",
+  "confidence": 0.96,
+  "transactions": [
+    {
+      "broker": "htsc_global",
+      "market": "HK",
+      "symbol": "00700",
+      "security_name": "腾讯控股",
+      "trade_type": "buy",
+      "trade_date": "2026-05-01",
+      "trade_time": "10:10:10",
+      "quantity": "100",
+      "price": "350.1200",
+      "gross_amount": "-35012.0000",
+      "net_amount": "-35035.0000",
+      "commission": "15.0000",
+      "fees": "8.0000",
+      "currency": "HKD",
+      "position_balance_after": "100",
+      "confidence": 0.97
+    }
+  ],
+  "positions": [],
+  "cash": []
+}

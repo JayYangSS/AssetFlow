@@ -1,0 +1,21 @@
+{
+  "screenshot_type": "positions",
+  "confidence": 0.95,
+  "transactions": [],
+  "positions": [
+    {
+      "broker": "htsc_global",
+      "market": "HK",
+      "symbol": "00700",
+      "security_name": "腾讯控股",
+      "quantity": "100",
+      "available_quantity": "100",
+      "market_price": "351.0000",
+      "market_value": "35100.0000",
+      "currency": "HKD",
+      "snapshot_at": "2026-05-01T15:59:00",
+      "confidence": 0.95
+    }
+  ],
+  "cash": []
+}

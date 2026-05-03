@@ -1,0 +1,17 @@
+{
+  "screenshot_type": "cash",
+  "confidence": 0.94,
+  "transactions": [],
+  "positions": [],
+  "cash": [
+    {
+      "broker": "htsc_global",
+      "currency": "HKD",
+      "cash_balance": "12000.0000",
+      "available_cash": "11900.0000",
+      "total_assets": "47100.0000",
+      "snapshot_at": "2026-05-01T16:00:00",
+      "confidence": 0.94
+    }
+  ]
+}
