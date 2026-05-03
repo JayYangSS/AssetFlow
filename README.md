@@ -5,16 +5,24 @@ AssetFlow is a local screenshot-driven investment ledger. The MVP receives iPhon
 ## Local Run
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+conda activate finacial
 pip install -e ".[dev]"
 Copy-Item .env.example .env
-```
-
-After the API entry point task adds `assetflow/main.py`, run:
-
-```powershell
 uvicorn assetflow.main:app --host 0.0.0.0 --port 8787
 ```
 
-The upload endpoint is `POST /api/uploads/ios-shortcut`.
+Health check:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8787/health
+```
+
+Upload endpoint:
+
+```text
+POST http://电脑局域网IP:8787/api/uploads/ios-shortcut
+Header: X-AssetFlow-Token
+Form fields: broker=htsc_global, file=<screenshot>
+```
+
+iPhone setup is documented in `docs/ios-shortcut.md`.

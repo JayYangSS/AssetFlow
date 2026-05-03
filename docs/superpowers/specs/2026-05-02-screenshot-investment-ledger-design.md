@@ -552,3 +552,7 @@ broker + account_alias + trade_date + trade_time + symbol + trade_type + quantit
 - 增加市场价格刷新。
 - 增加券商导出 CSV、Excel、PDF 账单导入作为备用路径。
 - 增加识别成功并审核后自动删除截图的策略。
+
+## 实施计划
+
+- `docs/superpowers/plans/2026-05-02-screenshot-investment-ledger.md`
