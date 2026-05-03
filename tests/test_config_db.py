@@ -19,6 +19,13 @@ def test_settings_builds_data_directories(tmp_path: Path) -> None:
     assert settings.database_url == f"sqlite:///{tmp_path / 'data' / 'assetflow.db'}"
 
 
+def test_env_example_contains_startable_settings() -> None:
+    settings = Settings(_env_file=Path(".env.example"))
+
+    assert len(settings.assetflow_upload_token) >= 8
+    assert settings.assetflow_recognition_provider == "fixture"
+
+
 def test_create_db_and_tables_allows_upload_insert(tmp_path: Path) -> None:
     settings = Settings(
         assetflow_data_dir=tmp_path / "data",
