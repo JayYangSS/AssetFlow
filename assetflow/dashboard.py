@@ -13,7 +13,7 @@ def _decimal_map_to_strings(values: dict[str, Decimal]) -> dict[str, str]:
 
 
 def _latest_positions(session: Session) -> list[PositionSnapshot]:
-    latest = (
+    latest_timestamp = (
         select(
             PositionSnapshot.broker,
             PositionSnapshot.account_alias,
@@ -31,25 +31,44 @@ def _latest_positions(session: Session) -> list[PositionSnapshot]:
         )
         .subquery()
     )
-    return session.exec(
-        select(PositionSnapshot)
+    latest_id = (
+        select(
+            PositionSnapshot.broker,
+            PositionSnapshot.account_alias,
+            PositionSnapshot.market,
+            PositionSnapshot.symbol,
+            PositionSnapshot.currency,
+            func.max(PositionSnapshot.id).label("id"),
+        )
         .join(
-            latest,
+            latest_timestamp,
             and_(
-                PositionSnapshot.broker == latest.c.broker,
-                PositionSnapshot.account_alias.is_not_distinct_from(latest.c.account_alias),
-                PositionSnapshot.market.is_not_distinct_from(latest.c.market),
-                PositionSnapshot.symbol == latest.c.symbol,
-                PositionSnapshot.currency == latest.c.currency,
-                PositionSnapshot.snapshot_at == latest.c.snapshot_at,
+                PositionSnapshot.broker == latest_timestamp.c.broker,
+                PositionSnapshot.account_alias.is_not_distinct_from(latest_timestamp.c.account_alias),
+                PositionSnapshot.market.is_not_distinct_from(latest_timestamp.c.market),
+                PositionSnapshot.symbol == latest_timestamp.c.symbol,
+                PositionSnapshot.currency == latest_timestamp.c.currency,
+                PositionSnapshot.snapshot_at == latest_timestamp.c.snapshot_at,
             ),
         )
+        .group_by(
+            PositionSnapshot.broker,
+            PositionSnapshot.account_alias,
+            PositionSnapshot.market,
+            PositionSnapshot.symbol,
+            PositionSnapshot.currency,
+        )
+        .subquery()
+    )
+    return session.exec(
+        select(PositionSnapshot)
+        .join(latest_id, PositionSnapshot.id == latest_id.c.id)
         .order_by(PositionSnapshot.market, PositionSnapshot.symbol)
     ).all()
 
 
 def _latest_cash(session: Session) -> list[CashSnapshot]:
-    latest = (
+    latest_timestamp = (
         select(
             CashSnapshot.broker,
             CashSnapshot.account_alias,
@@ -59,17 +78,28 @@ def _latest_cash(session: Session) -> list[CashSnapshot]:
         .group_by(CashSnapshot.broker, CashSnapshot.account_alias, CashSnapshot.currency)
         .subquery()
     )
-    return session.exec(
-        select(CashSnapshot)
+    latest_id = (
+        select(
+            CashSnapshot.broker,
+            CashSnapshot.account_alias,
+            CashSnapshot.currency,
+            func.max(CashSnapshot.id).label("id"),
+        )
         .join(
-            latest,
+            latest_timestamp,
             and_(
-                CashSnapshot.broker == latest.c.broker,
-                CashSnapshot.account_alias.is_not_distinct_from(latest.c.account_alias),
-                CashSnapshot.currency == latest.c.currency,
-                CashSnapshot.snapshot_at == latest.c.snapshot_at,
+                CashSnapshot.broker == latest_timestamp.c.broker,
+                CashSnapshot.account_alias.is_not_distinct_from(latest_timestamp.c.account_alias),
+                CashSnapshot.currency == latest_timestamp.c.currency,
+                CashSnapshot.snapshot_at == latest_timestamp.c.snapshot_at,
             ),
         )
+        .group_by(CashSnapshot.broker, CashSnapshot.account_alias, CashSnapshot.currency)
+        .subquery()
+    )
+    return session.exec(
+        select(CashSnapshot)
+        .join(latest_id, CashSnapshot.id == latest_id.c.id)
         .order_by(CashSnapshot.currency)
     ).all()
 

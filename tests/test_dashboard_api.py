@@ -275,6 +275,93 @@ def test_latest_cash_returns_newest_snapshot_for_account_currency(settings, sess
     assert body[0]["cash_balance"] == "250.000000"
 
 
+def test_latest_positions_breaks_snapshot_time_ties_by_greatest_id(settings, session) -> None:
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="position-tie.png",
+        content_hash="position-tie",
+        image_path=str(settings.upload_dir / "position-tie.png"),
+        mime_type="image/png",
+        file_size_bytes=10,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    for market_value in [Decimal("100"), Decimal("250")]:
+        session.add(
+            PositionSnapshot(
+                upload_id=upload.id,
+                ocr_result_id=1,
+                broker="htsc_global",
+                market="HK",
+                symbol="02015",
+                security_name="Li Auto-W",
+                quantity=Decimal("10"),
+                market_value=market_value,
+                currency="HKD",
+                snapshot_at=datetime(2026, 5, 4, 10, 0),
+                confidence=0.9,
+            )
+        )
+    session.commit()
+
+    client = TestClient(create_app(settings=settings, session=session))
+    response = client.get("/api/positions/latest")
+    summary_response = client.get("/api/dashboard/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["market_value"] == "250.000000"
+    assert summary_response.status_code == 200
+    assert summary_response.json()["position_value_by_currency"]["HKD"] == "250.000000"
+
+
+def test_latest_cash_breaks_snapshot_time_ties_by_greatest_id(settings, session) -> None:
+    upload = Upload(
+        broker="htsc_global",
+        account_alias="main",
+        source="web",
+        original_filename="cash-tie.png",
+        content_hash="cash-tie",
+        image_path=str(settings.upload_dir / "cash-tie.png"),
+        mime_type="image/png",
+        file_size_bytes=10,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    for balance in [Decimal("100"), Decimal("250")]:
+        session.add(
+            CashSnapshot(
+                upload_id=upload.id,
+                ocr_result_id=1,
+                broker="htsc_global",
+                account_alias="main",
+                currency="HKD",
+                cash_balance=balance,
+                available_cash=balance,
+                snapshot_at=datetime(2026, 5, 4, 10, 0),
+                confidence=0.9,
+            )
+        )
+    session.commit()
+
+    client = TestClient(create_app(settings=settings, session=session))
+    response = client.get("/api/cash/latest")
+    summary_response = client.get("/api/dashboard/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["cash_balance"] == "250.000000"
+    assert summary_response.status_code == 200
+    assert summary_response.json()["cash_by_currency"]["HKD"] == "250.000000"
+
+
 def test_uploads_api_hides_local_storage_fields(settings, session) -> None:
     session.add(
         Upload(
