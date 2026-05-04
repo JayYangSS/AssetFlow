@@ -27,3 +27,6 @@ pythonpath = ["."]
 
 [tool.setuptools.packages.find]
 include = ["assetflow*"]
+
+[tool.setuptools.package-data]
+assetflow = ["templates/*.html", "static/*"]
