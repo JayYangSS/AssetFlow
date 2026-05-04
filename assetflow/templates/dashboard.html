@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}总览 - AssetFlow{% endblock %}
+{% block content %}
+<section class="page-header">
+  <h1>总览</h1>
+</section>
+<section class="cards">
+  <article class="card"><span>待审核</span><strong>{{ summary.pending_review_count }}</strong></article>
+  <article class="card"><span>现金币种</span><strong>{{ summary.cash_by_currency | length }}</strong></article>
+  <article class="card"><span>持仓币种</span><strong>{{ summary.position_value_by_currency | length }}</strong></article>
+  <article class="card"><span>最近交易</span><strong>{{ summary.recent_transactions | length }}</strong></article>
+</section>
+{% endblock %}

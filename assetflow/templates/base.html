@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}AssetFlow{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/ui">AssetFlow</a>
+    <nav>
+      <a href="/ui" class="{% if active == 'dashboard' %}active{% endif %}">总览</a>
+      <a href="/ui/upload" class="{% if active == 'upload' %}active{% endif %}">上传</a>
+      <a href="/ui/review" class="{% if active == 'review' %}active{% endif %}">审核</a>
+      <a href="/ui/transactions" class="{% if active == 'transactions' %}active{% endif %}">交易流水</a>
+      <a href="/ui/positions" class="{% if active == 'positions' %}active{% endif %}">持仓</a>
+      <a href="/ui/cash" class="{% if active == 'cash' %}active{% endif %}">资金流水</a>
+      <a href="/ui/export" class="{% if active == 'export' %}active{% endif %}">导出</a>
+    </nav>
+  </header>
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

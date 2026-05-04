@@ -15,6 +15,7 @@ from assetflow.exporters.xlsx_template import export_transactions_to_template
 from assetflow.ledger import confirm_candidate
 from assetflow.models import CandidateTransaction, Transaction
 from assetflow.reconciliation import reconcile_positions
+from assetflow.ui import create_ui_router, mount_static
 from assetflow.upload_pipeline import process_uploaded_image
 from assetflow.uploads import InvalidUploadError
 
@@ -43,6 +44,9 @@ def create_app(settings: Settings | None = None, session: Session | None = None)
             return
         with Session(engine) as db:
             yield db
+
+    mount_static(app)
+    app.include_router(create_ui_router(settings, get_session))
 
     def require_token(x_assetflow_token: Annotated[str | None, Header()] = None) -> None:
         if x_assetflow_token != settings.assetflow_upload_token:
