@@ -101,6 +101,8 @@ def test_dashboard_summary_returns_core_counts_and_latest_snapshots(settings, se
     assert body["position_value_by_currency"]["HKD"] == "8000.000000"
     assert body["recent_transactions"][0]["symbol"] == "02015"
     assert body["recent_uploads"][0]["original_filename"] == "positions.png"
+    assert "image_path" not in body["recent_uploads"][0]
+    assert "content_hash" not in body["recent_uploads"][0]
 
 
 def test_transactions_api_filters_by_currency(settings, session) -> None:
@@ -145,3 +147,68 @@ def test_transactions_api_filters_by_currency(settings, session) -> None:
     assert response.status_code == 200
     body = response.json()
     assert [item["symbol"] for item in body] == ["02015"]
+
+
+def test_latest_positions_keeps_same_symbol_across_markets(settings, session) -> None:
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="positions.png",
+        content_hash="positions-markets",
+        image_path=str(settings.upload_dir / "positions.png"),
+        mime_type="image/png",
+        file_size_bytes=10,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    for market in ["HK", "US"]:
+        session.add(
+            PositionSnapshot(
+                upload_id=upload.id,
+                ocr_result_id=1,
+                broker="htsc_global",
+                market=market,
+                symbol="XYZ",
+                security_name="Cross Listed",
+                quantity=Decimal("10"),
+                market_value=Decimal("100"),
+                currency="USD",
+                snapshot_at=datetime(2026, 5, 4, 10, 0),
+                confidence=0.9,
+            )
+        )
+    session.commit()
+
+    client = TestClient(create_app(settings=settings, session=session))
+    response = client.get("/api/positions/latest")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [(item["market"], item["symbol"]) for item in body] == [("HK", "XYZ"), ("US", "XYZ")]
+
+
+def test_uploads_api_hides_local_storage_fields(settings, session) -> None:
+    session.add(
+        Upload(
+            broker="htsc_global",
+            source="web",
+            original_filename="trade.png",
+            content_hash="private-hash",
+            image_path=str(settings.upload_dir / "trade.png"),
+            mime_type="image/png",
+            file_size_bytes=10,
+            status="recognized",
+        )
+    )
+    session.commit()
+
+    client = TestClient(create_app(settings=settings, session=session))
+    response = client.get("/api/uploads")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[0]["original_filename"] == "trade.png"
+    assert "image_path" not in body[0]
+    assert "content_hash" not in body[0]
