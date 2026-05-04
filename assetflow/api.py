@@ -105,6 +105,7 @@ def create_app(settings: Settings | None = None, session: Session | None = None)
         trade_type: str | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
+        limit: int = 100,
     ) -> list[Transaction]:
         return list_transactions(
             db,
@@ -113,6 +114,7 @@ def create_app(settings: Settings | None = None, session: Session | None = None)
             trade_type=trade_type,
             date_from=date_from,
             date_to=date_to,
+            limit=limit,
         )
 
     @app.get("/api/positions/latest")

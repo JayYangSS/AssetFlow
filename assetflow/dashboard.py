@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import func
+from sqlalchemy import and_, func
 from sqlmodel import Session, select
 
 from assetflow.models import CashSnapshot, CandidateTransaction, PositionSnapshot, Transaction, Upload
@@ -13,23 +13,65 @@ def _decimal_map_to_strings(values: dict[str, Decimal]) -> dict[str, str]:
 
 
 def _latest_positions(session: Session) -> list[PositionSnapshot]:
-    snapshots = session.exec(select(PositionSnapshot)).all()
-    latest: dict[tuple[str, str | None, str | None, str, str], PositionSnapshot] = {}
-    for snapshot in snapshots:
-        key = (snapshot.broker, snapshot.account_alias, snapshot.market, snapshot.symbol, snapshot.currency)
-        if key not in latest or snapshot.snapshot_at > latest[key].snapshot_at:
-            latest[key] = snapshot
-    return sorted(latest.values(), key=lambda item: (item.market or "", item.symbol))
+    latest = (
+        select(
+            PositionSnapshot.broker,
+            PositionSnapshot.account_alias,
+            PositionSnapshot.market,
+            PositionSnapshot.symbol,
+            PositionSnapshot.currency,
+            func.max(PositionSnapshot.snapshot_at).label("snapshot_at"),
+        )
+        .group_by(
+            PositionSnapshot.broker,
+            PositionSnapshot.account_alias,
+            PositionSnapshot.market,
+            PositionSnapshot.symbol,
+            PositionSnapshot.currency,
+        )
+        .subquery()
+    )
+    return session.exec(
+        select(PositionSnapshot)
+        .join(
+            latest,
+            and_(
+                PositionSnapshot.broker == latest.c.broker,
+                PositionSnapshot.account_alias.is_not_distinct_from(latest.c.account_alias),
+                PositionSnapshot.market.is_not_distinct_from(latest.c.market),
+                PositionSnapshot.symbol == latest.c.symbol,
+                PositionSnapshot.currency == latest.c.currency,
+                PositionSnapshot.snapshot_at == latest.c.snapshot_at,
+            ),
+        )
+        .order_by(PositionSnapshot.market, PositionSnapshot.symbol)
+    ).all()
 
 
 def _latest_cash(session: Session) -> list[CashSnapshot]:
-    snapshots = session.exec(select(CashSnapshot)).all()
-    latest: dict[tuple[str, str | None, str], CashSnapshot] = {}
-    for snapshot in snapshots:
-        key = (snapshot.broker, snapshot.account_alias, snapshot.currency)
-        if key not in latest or snapshot.snapshot_at > latest[key].snapshot_at:
-            latest[key] = snapshot
-    return sorted(latest.values(), key=lambda item: item.currency)
+    latest = (
+        select(
+            CashSnapshot.broker,
+            CashSnapshot.account_alias,
+            CashSnapshot.currency,
+            func.max(CashSnapshot.snapshot_at).label("snapshot_at"),
+        )
+        .group_by(CashSnapshot.broker, CashSnapshot.account_alias, CashSnapshot.currency)
+        .subquery()
+    )
+    return session.exec(
+        select(CashSnapshot)
+        .join(
+            latest,
+            and_(
+                CashSnapshot.broker == latest.c.broker,
+                CashSnapshot.account_alias.is_not_distinct_from(latest.c.account_alias),
+                CashSnapshot.currency == latest.c.currency,
+                CashSnapshot.snapshot_at == latest.c.snapshot_at,
+            ),
+        )
+        .order_by(CashSnapshot.currency)
+    ).all()
 
 
 def _upload_payload(upload: Upload) -> dict[str, object]:
@@ -81,7 +123,9 @@ def list_transactions(
     trade_type: str | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
+    limit: int = 100,
 ) -> list[Transaction]:
+    limit = min(max(limit, 1), 500)
     query = select(Transaction)
     if currency:
         query = query.where(Transaction.currency == currency)
@@ -93,7 +137,7 @@ def list_transactions(
         query = query.where(Transaction.trade_date >= date_from)
     if date_to:
         query = query.where(Transaction.trade_date <= date_to)
-    return session.exec(query.order_by(Transaction.trade_date.desc(), Transaction.created_at.desc())).all()
+    return session.exec(query.order_by(Transaction.trade_date.desc(), Transaction.created_at.desc()).limit(limit)).all()
 
 
 def latest_positions(session: Session) -> list[PositionSnapshot]:

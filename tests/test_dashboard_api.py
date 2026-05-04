@@ -149,6 +149,49 @@ def test_transactions_api_filters_by_currency(settings, session) -> None:
     assert [item["symbol"] for item in body] == ["02015"]
 
 
+def test_transactions_api_defaults_to_bounded_result_set(settings, session) -> None:
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="many-trades.png",
+        content_hash="many-trades",
+        image_path=str(settings.upload_dir / "many-trades.png"),
+        mime_type="image/png",
+        file_size_bytes=10,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    for index in range(101):
+        session.add(
+            Transaction(
+                broker="htsc_global",
+                market="US",
+                symbol=f"T{index:03d}",
+                security_name=f"T{index:03d}",
+                trade_type="buy",
+                trade_date=date(2026, 5, 1),
+                quantity=Decimal("1"),
+                price=Decimal("10"),
+                net_amount=Decimal("-10"),
+                currency="USD",
+                source_upload_id=upload.id,
+                source_ocr_result_id=1,
+                source_candidate_id=1,
+                dedupe_key=f"bounded-{index}",
+                confidence=0.9,
+            )
+        )
+    session.commit()
+
+    client = TestClient(create_app(settings=settings, session=session))
+    response = client.get("/api/transactions")
+
+    assert response.status_code == 200
+    assert len(response.json()) == 100
+
+
 def test_latest_positions_keeps_same_symbol_across_markets(settings, session) -> None:
     upload = Upload(
         broker="htsc_global",
@@ -187,6 +230,49 @@ def test_latest_positions_keeps_same_symbol_across_markets(settings, session) ->
     assert response.status_code == 200
     body = response.json()
     assert [(item["market"], item["symbol"]) for item in body] == [("HK", "XYZ"), ("US", "XYZ")]
+
+
+def test_latest_cash_returns_newest_snapshot_for_account_currency(settings, session) -> None:
+    upload = Upload(
+        broker="htsc_global",
+        account_alias="main",
+        source="web",
+        original_filename="cash.png",
+        content_hash="cash-latest",
+        image_path=str(settings.upload_dir / "cash.png"),
+        mime_type="image/png",
+        file_size_bytes=10,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    for balance, snapshot_at in [
+        (Decimal("100"), datetime(2026, 5, 3, 10, 0)),
+        (Decimal("250"), datetime(2026, 5, 4, 10, 0)),
+    ]:
+        session.add(
+            CashSnapshot(
+                upload_id=upload.id,
+                ocr_result_id=1,
+                broker="htsc_global",
+                account_alias="main",
+                currency="HKD",
+                cash_balance=balance,
+                available_cash=balance,
+                snapshot_at=snapshot_at,
+                confidence=0.9,
+            )
+        )
+    session.commit()
+
+    client = TestClient(create_app(settings=settings, session=session))
+    response = client.get("/api/cash/latest")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["cash_balance"] == "250.000000"
 
 
 def test_uploads_api_hides_local_storage_fields(settings, session) -> None:
