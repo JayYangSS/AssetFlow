@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 from typing import Annotated
 
@@ -5,6 +6,7 @@ from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadF
 from sqlmodel import Session, select
 
 from assetflow.config import Settings
+from assetflow.dashboard import dashboard_summary, latest_cash, latest_positions, list_transactions, recent_uploads
 from assetflow.db import create_db_and_tables, make_engine
 from assetflow.exporters.xlsx_template import export_transactions_to_template
 from assetflow.ledger import confirm_candidate
@@ -90,5 +92,39 @@ def create_app(settings: Settings | None = None, session: Session | None = None)
         transactions = db.exec(select(Transaction).where(Transaction.currency == currency)).all()
         result = export_transactions_to_template(Path(template_path), Path(output_path), transactions)
         return {"output_path": str(result.output_path), "row_count": result.row_count, "skipped_ids": result.skipped_ids}
+
+    @app.get("/api/dashboard/summary")
+    def dashboard(db: Annotated[Session, Depends(get_session)]) -> dict[str, object]:
+        return dashboard_summary(db)
+
+    @app.get("/api/transactions")
+    def transactions(
+        db: Annotated[Session, Depends(get_session)],
+        currency: str | None = None,
+        symbol: str | None = None,
+        trade_type: str | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> list[Transaction]:
+        return list_transactions(
+            db,
+            currency=currency,
+            symbol=symbol,
+            trade_type=trade_type,
+            date_from=date_from,
+            date_to=date_to,
+        )
+
+    @app.get("/api/positions/latest")
+    def positions_latest(db: Annotated[Session, Depends(get_session)]):
+        return latest_positions(db)
+
+    @app.get("/api/cash/latest")
+    def cash_latest(db: Annotated[Session, Depends(get_session)]):
+        return latest_cash(db)
+
+    @app.get("/api/uploads")
+    def uploads(db: Annotated[Session, Depends(get_session)]):
+        return recent_uploads(db)
 
     return app
