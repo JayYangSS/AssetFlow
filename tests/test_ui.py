@@ -32,6 +32,32 @@ def test_ui_navigation_links_core_pages(settings, session) -> None:
     assert 'href="/ui/export"' in response.text
 
 
+def test_ui_core_pages_return_200(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+
+    for path, expected in [
+        ("/ui/upload", "上传截图"),
+        ("/ui/review", "候选交易"),
+        ("/ui/transactions", "交易流水"),
+        ("/ui/positions", "持仓"),
+        ("/ui/cash", "资金流水"),
+        ("/ui/export", "导出 XLSX"),
+    ]:
+        response = client.get(path)
+        assert response.status_code == 200
+        assert expected in response.text
+
+
+def test_upload_page_contains_file_form(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get("/ui/upload")
+
+    assert 'enctype="multipart/form-data"' in response.text
+    assert 'name="file"' in response.text
+    assert 'name="broker"' in response.text
+
+
 def test_ui_serves_static_css(settings, session) -> None:
     client = TestClient(create_app(settings=settings, session=session))
 

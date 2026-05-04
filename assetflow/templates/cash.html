@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}资金流水 - AssetFlow{% endblock %}
+{% block content %}
+<section class="page-header"><h1>资金流水</h1></section>
+<form class="panel" method="post" action="/ui/cash">
+  <label>券商 <input name="broker" value="htsc_global"></label>
+  <label>账户别名 <input name="account_alias" placeholder="可选"></label>
+  <label>币种 <input name="currency" value="HKD"></label>
+  <label>现金余额 <input name="cash_balance" inputmode="decimal"></label>
+  <button type="submit">记录资金</button>
+</form>
+{% if result %}<section class="panel"><h2>记录结果</h2><p>{{ result }}</p></section>{% endif %}
+{% if error %}<section class="panel error"><h2>记录失败</h2><p>{{ error }}</p></section>{% endif %}
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>券商</th><th>账户</th><th>币种</th><th>现金</th><th>可用</th><th>冻结</th><th>市值</th><th>总资产</th><th>快照时间</th></tr></thead>
+    <tbody>
+    {% for item in cash_items %}
+      <tr>
+        <td>{{ item.broker }}</td><td>{{ item.account_alias or "" }}</td><td>{{ item.currency }}</td><td>{{ item.cash_balance }}</td><td>{{ item.available_cash }}</td><td>{{ item.frozen_cash }}</td><td>{{ item.market_value }}</td><td>{{ item.total_assets }}</td><td>{{ item.snapshot_at }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9">暂无资金流水。</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

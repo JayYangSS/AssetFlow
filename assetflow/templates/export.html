@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}导出 - AssetFlow{% endblock %}
+{% block content %}
+<section class="page-header"><h1>导出 XLSX</h1></section>
+<form class="panel" method="post" action="/ui/export">
+  <label>导出类型
+    <select name="export_type">
+      <option value="transactions">交易流水</option>
+      <option value="positions">持仓</option>
+      <option value="cash">资金流水</option>
+    </select>
+  </label>
+  <label>券商 <input name="broker" placeholder="可选"></label>
+  <label>账户别名 <input name="account_alias" placeholder="可选"></label>
+  <label>币种 <input name="currency" placeholder="可选"></label>
+  <label>开始日期 <input type="date" name="date_from"></label>
+  <label>结束日期 <input type="date" name="date_to"></label>
+  <button type="submit">导出</button>
+</form>
+{% if result %}<section class="panel"><h2>导出结果</h2><p>{{ result }}</p></section>{% endif %}
+{% if error %}<section class="panel error"><h2>导出失败</h2><p>{{ error }}</p></section>{% endif %}
+{% endblock %}

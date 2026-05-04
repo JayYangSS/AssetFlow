@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}持仓 - AssetFlow{% endblock %}
+{% block content %}
+<section class="page-header"><h1>持仓</h1></section>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>券商</th><th>账户</th><th>市场</th><th>代码</th><th>名称</th><th>数量</th><th>可用</th><th>成本价</th><th>市价</th><th>市值</th><th>盈亏</th><th>币种</th><th>快照时间</th></tr></thead>
+    <tbody>
+    {% for item in positions %}
+      <tr>
+        <td>{{ item.broker }}</td><td>{{ item.account_alias or "" }}</td><td>{{ item.market }}</td><td>{{ item.symbol }}</td><td>{{ item.security_name }}</td><td>{{ item.quantity }}</td><td>{{ item.available_quantity }}</td><td>{{ item.cost_price }}</td><td>{{ item.market_price }}</td><td>{{ item.market_value }}</td><td>{{ item.unrealized_pnl }}</td><td>{{ item.currency }}</td><td>{{ item.snapshot_at }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="13">暂无持仓。</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

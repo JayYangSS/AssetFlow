@@ -10,4 +10,36 @@
   <article class="card"><span>持仓币种</span><strong>{{ summary.position_value_by_currency | length }}</strong></article>
   <article class="card"><span>最近交易</span><strong>{{ summary.recent_transactions | length }}</strong></article>
 </section>
+<section class="grid-two">
+  <article class="panel">
+    <h2>最近上传</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ID</th><th>券商</th><th>文件</th><th>状态</th><th>时间</th></tr></thead>
+        <tbody>
+        {% for item in summary.recent_uploads %}
+          <tr><td>{{ item.id }}</td><td>{{ item.broker }}</td><td>{{ item.original_filename }}</td><td>{{ item.status }}</td><td>{{ item.created_at }}</td></tr>
+        {% else %}
+          <tr><td colspan="5">暂无上传。</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+  <article class="panel">
+    <h2>最近交易</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>日期</th><th>代码</th><th>类型</th><th>数量</th><th>净额</th></tr></thead>
+        <tbody>
+        {% for item in summary.recent_transactions %}
+          <tr><td>{{ item.trade_date }}</td><td>{{ item.symbol }}</td><td>{{ item.trade_type }}</td><td>{{ item.quantity }}</td><td>{{ item.net_amount }} {{ item.currency }}</td></tr>
+        {% else %}
+          <tr><td colspan="5">暂无交易。</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </article>
+</section>
 {% endblock %}
