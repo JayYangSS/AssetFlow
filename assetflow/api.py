@@ -83,7 +83,9 @@ def create_app(settings: Settings | None = None, session: Session | None = None)
 
     @app.get("/api/review/candidates")
     def list_candidates(db: Annotated[Session, Depends(get_session)]) -> list[CandidateTransaction]:
-        return db.exec(select(CandidateTransaction).where(CandidateTransaction.review_status != "confirmed")).all()
+        return db.exec(
+            select(CandidateTransaction).where(CandidateTransaction.review_status.in_(("pending", "needs_review")))
+        ).all()
 
     @app.post("/api/review/candidates/{candidate_id}/confirm")
     def confirm(candidate_id: int, db: Annotated[Session, Depends(get_session)]) -> dict[str, int | None]:

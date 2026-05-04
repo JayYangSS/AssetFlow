@@ -28,7 +28,7 @@ def create_cash_movement(
     if trade_type not in CASH_MOVEMENT_TYPES:
         raise ValueError(f"Unsupported cash movement type: {trade_type}")
 
-    net_amount = _signed_net_amount(trade_type, amount)
+    net_amount = _normalize_decimal(_signed_net_amount(trade_type, amount))
     dedupe_key = build_dedupe_key(
         broker=broker,
         account_alias=account_alias,
@@ -36,8 +36,8 @@ def create_cash_movement(
         trade_time=None,
         symbol="CASH",
         trade_type=trade_type,
-        quantity=Decimal("0"),
-        price=Decimal("0"),
+        quantity=_normalize_decimal(Decimal("0")),
+        price=_normalize_decimal(Decimal("0")),
         net_amount=net_amount,
         currency=currency,
     )
@@ -74,3 +74,7 @@ def _signed_net_amount(trade_type: str, amount: Decimal) -> Decimal:
     if trade_type == "adjustment":
         return amount
     return abs(amount)
+
+
+def _normalize_decimal(value: Decimal) -> Decimal:
+    return value.normalize()

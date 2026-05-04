@@ -33,8 +33,7 @@ def _relax_sqlite_transaction_source_columns(engine: Engine) -> None:
         if not any(not_null_by_name.get(column_name) for column_name in source_columns):
             return
 
-        legacy_table = "transaction__legacy_source_nullable"
-        connection.exec_driver_sql(f'DROP TABLE IF EXISTS "{legacy_table}"')
+        legacy_table = _sqlite_unique_table_name(connection, "transaction__source_nullable_migration")
         indexes = connection.exec_driver_sql(
             """
             SELECT name, sql
@@ -63,3 +62,22 @@ def _relax_sqlite_transaction_source_columns(engine: Engine) -> None:
                 connection.exec_driver_sql(index_sql)
 
         connection.exec_driver_sql(f'DROP TABLE "{legacy_table}"')
+
+
+def _sqlite_unique_table_name(connection, base_name: str) -> str:
+    table_name = base_name
+    suffix = 1
+    while _sqlite_table_exists(connection, table_name):
+        table_name = f"{base_name}_{suffix}"
+        suffix += 1
+    return table_name
+
+
+def _sqlite_table_exists(connection, table_name: str) -> bool:
+    return (
+        connection.exec_driver_sql(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+            (table_name,),
+        ).first()
+        is not None
+    )

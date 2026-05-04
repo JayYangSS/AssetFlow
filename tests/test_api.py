@@ -55,6 +55,35 @@ def test_ignore_candidate_updates_review_status(settings, session) -> None:
     assert candidate.review_status == "ignored"
 
 
+def test_ignored_candidate_is_excluded_from_default_review_queue(settings, session) -> None:
+    app = create_app(settings=settings, session=session)
+    client = TestClient(app)
+    upload_response = client.post(
+        "/api/uploads/ios-shortcut",
+        headers={"X-AssetFlow-Token": "secret-token"},
+        data={"broker": "htsc_global"},
+        files={"file": ("trade.png", b"\x89PNG\r\n\x1a\nabc", "image/png")},
+    )
+    assert upload_response.status_code == 200
+    candidate = session.exec(select(CandidateTransaction)).one()
+
+    ignore_response = client.post(f"/api/review/candidates/{candidate.id}/ignore")
+    queue_response = client.get("/api/review/candidates")
+
+    assert ignore_response.status_code == 200
+    assert queue_response.status_code == 200
+    assert all(item["id"] != candidate.id for item in queue_response.json())
+
+
+def test_ignore_candidate_returns_404_when_missing(settings, session) -> None:
+    app = create_app(settings=settings, session=session)
+    client = TestClient(app)
+
+    response = client.post("/api/review/candidates/999/ignore")
+
+    assert response.status_code == 404
+
+
 def test_duplicate_upload_does_not_create_second_transaction(settings, session) -> None:
     app = create_app(settings=settings, session=session)
     client = TestClient(app)
