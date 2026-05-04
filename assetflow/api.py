@@ -7,12 +7,11 @@ from sqlmodel import Session, select
 from assetflow.config import Settings
 from assetflow.db import create_db_and_tables, make_engine
 from assetflow.exporters.xlsx_template import export_transactions_to_template
-from assetflow.ledger import auto_confirm_candidates, confirm_candidate
+from assetflow.ledger import confirm_candidate
 from assetflow.models import CandidateTransaction, Transaction
-from assetflow.recognition.providers import make_provider
-from assetflow.recognition.service import process_recognition_result
 from assetflow.reconciliation import reconcile_positions
-from assetflow.uploads import InvalidUploadError, store_upload
+from assetflow.upload_pipeline import process_uploaded_image
+from assetflow.uploads import InvalidUploadError
 
 
 def create_app(settings: Settings | None = None, session: Session | None = None) -> FastAPI:
@@ -49,7 +48,7 @@ def create_app(settings: Settings | None = None, session: Session | None = None)
     ) -> dict[str, object]:
         data = await file.read()
         try:
-            upload = store_upload(
+            result = process_uploaded_image(
                 session=db,
                 settings=settings,
                 broker=broker,
@@ -62,18 +61,10 @@ def create_app(settings: Settings | None = None, session: Session | None = None)
         except InvalidUploadError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-        auto_confirmed = 0
-        if upload.status != "duplicate":
-            provider = make_provider(settings)
-            result = provider.recognize(Path(upload.image_path), broker)
-            process_recognition_result(db, upload, provider, result)
-            auto_confirmed = auto_confirm_candidates(db)
-            reconcile_positions(db, broker=broker, account_alias=account_alias)
-            db.refresh(upload)
-
+        upload = result.upload
         return {
             "upload": {"id": upload.id, "status": upload.status, "duplicate_of_upload_id": upload.duplicate_of_upload_id},
-            "auto_confirmed": auto_confirmed,
+            "auto_confirmed": result.auto_confirmed,
         }
 
     @app.get("/api/review/candidates")
