@@ -2,9 +2,10 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi.testclient import TestClient
+from sqlmodel import select
 
 from assetflow.api import create_app
-from assetflow.models import CandidateTransaction, Upload
+from assetflow.models import CandidateTransaction, Transaction, Upload
 
 
 def test_ui_dashboard_page_returns_html(settings, session) -> None:
@@ -107,3 +108,48 @@ def test_ui_dashboard_renders_pending_review_count(settings, session) -> None:
 
     assert response.status_code == 200
     assert "<span>待审核</span><strong>1</strong>" in response.text
+
+
+def test_ui_upload_form_processes_file(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.post(
+        "/ui/upload",
+        data={"broker": "htsc_global", "account_alias": ""},
+        files={"file": ("trade.png", b"\x89PNG\r\n\x1a\nabc", "image/png")},
+    )
+
+    assert response.status_code == 200
+    assert "recognized" in response.text
+    assert session.exec(select(Upload)).one().source == "web"
+
+
+def test_ui_confirm_and_ignore_candidate_forms(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+    client.post(
+        "/ui/upload",
+        data={"broker": "htsc_global", "account_alias": ""},
+        files={"file": ("trade.png", b"\x89PNG\r\n\x1a\nabc", "image/png")},
+    )
+    candidate = session.exec(select(CandidateTransaction)).one()
+
+    ignore_response = client.post(f"/ui/review/{candidate.id}/ignore", follow_redirects=False)
+
+    assert ignore_response.status_code == 303
+    session.refresh(candidate)
+    assert candidate.review_status == "ignored"
+
+
+def test_ui_cash_movement_form_creates_transaction(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.post(
+        "/ui/cash/movements",
+        data={"trade_type": "cash_in", "trade_date": "2026-05-04", "currency": "HKD", "amount": "1000"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    tx = session.exec(select(Transaction)).one()
+    assert tx.trade_type == "cash_in"
+    assert tx.net_amount == Decimal("1000.000000")

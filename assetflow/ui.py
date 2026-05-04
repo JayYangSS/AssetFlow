@@ -1,15 +1,22 @@
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Callable
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
 from sqlmodel import select
 
+from assetflow.cash_movements import create_cash_movement
 from assetflow.config import Settings
 from assetflow.dashboard import dashboard_summary, latest_cash, latest_positions, list_transactions, recent_uploads
+from assetflow.ledger import confirm_candidate
 from assetflow.models import CandidateTransaction
+from assetflow.upload_pipeline import process_uploaded_image
+from assetflow.uploads import InvalidUploadError
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -41,6 +48,53 @@ def create_ui_router(settings: Settings, get_session: Callable):
             },
         )
 
+    @router.post("/ui/upload")
+    async def upload_form(
+        request: Request,
+        db: Session = Depends(get_session),
+        broker: str = Form("htsc_global"),
+        account_alias: str | None = Form(None),
+        file: UploadFile = File(),
+    ):
+        data = await file.read()
+        if account_alias is not None:
+            account_alias = account_alias.strip() or None
+        try:
+            result = process_uploaded_image(
+                session=db,
+                settings=settings,
+                broker=broker,
+                source="web",
+                filename=file.filename or "screenshot.png",
+                content_type=file.content_type or "application/octet-stream",
+                data=data,
+                account_alias=account_alias,
+            )
+        except InvalidUploadError as exc:
+            return templates.TemplateResponse(
+                request,
+                "upload.html",
+                {
+                    "settings": settings,
+                    "active": "upload",
+                    "result": None,
+                    "error": str(exc),
+                    "uploads": recent_uploads(db),
+                },
+            )
+
+        return templates.TemplateResponse(
+            request,
+            "upload.html",
+            {
+                "settings": settings,
+                "active": "upload",
+                "result": f"{result.upload.status}; auto_confirmed={result.auto_confirmed}",
+                "error": None,
+                "uploads": recent_uploads(db),
+            },
+        )
+
     @router.get("/ui/review")
     def review_page(request: Request, status: str | None = None, db: Session = Depends(get_session)):
         query = select(CandidateTransaction)
@@ -62,6 +116,23 @@ def create_ui_router(settings: Settings, get_session: Callable):
                 "statuses": statuses,
             },
         )
+
+    @router.post("/ui/review/{candidate_id}/confirm")
+    def confirm_candidate_form(candidate_id: int, db: Session = Depends(get_session)):
+        try:
+            confirm_candidate(db, candidate_id)
+        except ValueError:
+            pass
+        return RedirectResponse("/ui/review", status_code=303)
+
+    @router.post("/ui/review/{candidate_id}/ignore")
+    def ignore_candidate_form(candidate_id: int, db: Session = Depends(get_session)):
+        candidate = db.get(CandidateTransaction, candidate_id)
+        if candidate is not None:
+            candidate.review_status = "ignored"
+            db.add(candidate)
+            db.commit()
+        return RedirectResponse("/ui/review", status_code=303)
 
     @router.get("/ui/transactions")
     def transactions_page(
@@ -97,6 +168,39 @@ def create_ui_router(settings: Settings, get_session: Callable):
             "cash.html",
             {"settings": settings, "active": "cash", "cash_items": latest_cash(db), "result": None, "error": None},
         )
+
+    @router.post("/ui/cash/movements")
+    def cash_movement_form(
+        request: Request,
+        db: Session = Depends(get_session),
+        trade_type: str = Form(),
+        trade_date: date = Form(),
+        currency: str = Form(),
+        amount: Decimal = Form(),
+    ):
+        try:
+            create_cash_movement(
+                db,
+                broker="htsc_global",
+                account_alias=None,
+                trade_type=trade_type,
+                trade_date=trade_date,
+                currency=currency,
+                amount=amount,
+            )
+        except ValueError as exc:
+            return templates.TemplateResponse(
+                request,
+                "cash.html",
+                {
+                    "settings": settings,
+                    "active": "cash",
+                    "cash_items": latest_cash(db),
+                    "result": None,
+                    "error": str(exc),
+                },
+            )
+        return RedirectResponse("/ui/cash", status_code=303)
 
     @router.get("/ui/export")
     def export_page(request: Request):
