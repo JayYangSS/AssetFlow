@@ -1,10 +1,13 @@
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
+from assetflow.cash_movements import create_cash_movement
 from assetflow.config import Settings
 from assetflow.dashboard import dashboard_summary, latest_cash, latest_positions, list_transactions, recent_uploads
 from assetflow.db import create_db_and_tables, make_engine
@@ -14,6 +17,15 @@ from assetflow.models import CandidateTransaction, Transaction
 from assetflow.reconciliation import reconcile_positions
 from assetflow.upload_pipeline import process_uploaded_image
 from assetflow.uploads import InvalidUploadError
+
+
+class CashMovementRequest(BaseModel):
+    broker: str = "htsc_global"
+    account_alias: str | None = None
+    trade_type: str
+    trade_date: date
+    currency: str
+    amount: Decimal
 
 
 def create_app(settings: Settings | None = None, session: Session | None = None) -> FastAPI:
@@ -76,6 +88,32 @@ def create_app(settings: Settings | None = None, session: Session | None = None)
     @app.post("/api/review/candidates/{candidate_id}/confirm")
     def confirm(candidate_id: int, db: Annotated[Session, Depends(get_session)]) -> dict[str, int | None]:
         tx = confirm_candidate(db, candidate_id)
+        return {"transaction_id": tx.id}
+
+    @app.post("/api/review/candidates/{candidate_id}/ignore")
+    def ignore_candidate(candidate_id: int, db: Annotated[Session, Depends(get_session)]) -> dict[str, int]:
+        candidate = db.get(CandidateTransaction, candidate_id)
+        if candidate is None:
+            raise HTTPException(status_code=404, detail=f"Candidate not found: {candidate_id}")
+        candidate.review_status = "ignored"
+        db.add(candidate)
+        db.commit()
+        return {"candidate_id": candidate_id}
+
+    @app.post("/api/cash/movements")
+    def cash_movement(request: CashMovementRequest, db: Annotated[Session, Depends(get_session)]) -> dict[str, int | None]:
+        try:
+            tx = create_cash_movement(
+                db,
+                broker=request.broker,
+                account_alias=request.account_alias,
+                trade_type=request.trade_type,
+                trade_date=request.trade_date,
+                currency=request.currency,
+                amount=request.amount,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"transaction_id": tx.id}
 
     @app.post("/api/reconcile")

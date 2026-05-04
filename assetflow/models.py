@@ -86,9 +86,9 @@ class Transaction(SQLModel, table=True):
     fees: Decimal | None = Field(default=None, sa_column=money_column())
     currency: str
     position_balance_after: Decimal | None = Field(default=None, sa_column=money_column())
-    source_upload_id: int = Field(foreign_key="upload.id")
-    source_ocr_result_id: int = Field(foreign_key="ocrresult.id")
-    source_candidate_id: int = Field(foreign_key="candidatetransaction.id")
+    source_upload_id: int | None = Field(default=None, foreign_key="upload.id")
+    source_ocr_result_id: int | None = Field(default=None, foreign_key="ocrresult.id")
+    source_candidate_id: int | None = Field(default=None, foreign_key="candidatetransaction.id")
     dedupe_key: str = Field(index=True, unique=True)
     confidence: float
     status: str = "confirmed"

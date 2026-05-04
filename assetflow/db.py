@@ -10,9 +10,56 @@ def make_engine(database_url: str) -> Engine:
 
 
 def create_db_and_tables(engine: Engine) -> None:
+    _relax_sqlite_transaction_source_columns(engine)
     SQLModel.metadata.create_all(engine)
 
 
 def session_scope(engine: Engine) -> Generator[Session, None, None]:
     with Session(engine) as session:
         yield session
+
+
+def _relax_sqlite_transaction_source_columns(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    source_columns = {"source_upload_id", "source_ocr_result_id", "source_candidate_id"}
+    with engine.begin() as connection:
+        rows = connection.exec_driver_sql('PRAGMA table_info("transaction")').all()
+        if not rows:
+            return
+
+        not_null_by_name = {row[1]: row[3] for row in rows}
+        if not any(not_null_by_name.get(column_name) for column_name in source_columns):
+            return
+
+        legacy_table = "transaction__legacy_source_nullable"
+        connection.exec_driver_sql(f'DROP TABLE IF EXISTS "{legacy_table}"')
+        indexes = connection.exec_driver_sql(
+            """
+            SELECT name, sql
+            FROM sqlite_master
+            WHERE type = 'index'
+              AND tbl_name = 'transaction'
+              AND sql IS NOT NULL
+            """
+        ).all()
+        for index_name, _ in indexes:
+            connection.exec_driver_sql(f'DROP INDEX IF EXISTS "{index_name}"')
+
+        connection.exec_driver_sql(f'ALTER TABLE "transaction" RENAME TO "{legacy_table}"')
+        SQLModel.metadata.tables["transaction"].create(connection)
+
+        column_names = [row[1] for row in rows]
+        quoted_columns = ", ".join(f'"{column_name}"' for column_name in column_names)
+        connection.exec_driver_sql(
+            f'INSERT INTO "transaction" ({quoted_columns}) SELECT {quoted_columns} FROM "{legacy_table}"'
+        )
+
+        current_indexes = connection.exec_driver_sql('PRAGMA index_list("transaction")').all()
+        current_index_names = {row[1] for row in current_indexes}
+        for index_name, index_sql in indexes:
+            if index_name not in current_index_names:
+                connection.exec_driver_sql(index_sql)
+
+        connection.exec_driver_sql(f'DROP TABLE "{legacy_table}"')

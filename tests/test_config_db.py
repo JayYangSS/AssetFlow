@@ -53,3 +53,58 @@ def test_create_db_and_tables_allows_upload_insert(tmp_path: Path) -> None:
         saved = session.exec(select(Upload)).one()
 
     assert saved.content_hash == "abc123"
+
+
+def test_create_db_and_tables_relaxes_manual_transaction_source_columns(tmp_path: Path) -> None:
+    settings = Settings(
+        assetflow_data_dir=tmp_path / "data",
+        assetflow_upload_token="secret-token",
+        assetflow_recognition_provider="fixture",
+    )
+    settings.ensure_directories()
+    engine = make_engine(settings.database_url)
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            """
+            CREATE TABLE "transaction" (
+                id INTEGER PRIMARY KEY,
+                broker VARCHAR NOT NULL,
+                account_alias VARCHAR,
+                market VARCHAR,
+                symbol VARCHAR NOT NULL,
+                security_name VARCHAR NOT NULL,
+                trade_type VARCHAR NOT NULL,
+                trade_date DATE NOT NULL,
+                trade_time TIME,
+                quantity NUMERIC(20, 6) NOT NULL,
+                price NUMERIC(20, 6) NOT NULL,
+                gross_amount NUMERIC(20, 6),
+                net_amount NUMERIC(20, 6) NOT NULL,
+                commission NUMERIC(20, 6),
+                fees NUMERIC(20, 6),
+                currency VARCHAR NOT NULL,
+                position_balance_after NUMERIC(20, 6),
+                source_upload_id INTEGER NOT NULL,
+                source_ocr_result_id INTEGER NOT NULL,
+                source_candidate_id INTEGER NOT NULL,
+                dedupe_key VARCHAR NOT NULL,
+                confidence FLOAT NOT NULL,
+                status VARCHAR NOT NULL,
+                created_at DATETIME NOT NULL,
+                updated_at DATETIME NOT NULL
+            )
+            """
+        )
+        connection.exec_driver_sql('CREATE UNIQUE INDEX ix_transaction_dedupe_key ON "transaction" (dedupe_key)')
+
+    create_db_and_tables(engine)
+
+    with engine.connect() as connection:
+        rows = connection.exec_driver_sql('PRAGMA table_info("transaction")').all()
+        indexes = connection.exec_driver_sql('PRAGMA index_list("transaction")').all()
+    not_null_by_name = {row[1]: row[3] for row in rows}
+    index_names = {row[1] for row in indexes}
+    assert not_null_by_name["source_upload_id"] == 0
+    assert not_null_by_name["source_ocr_result_id"] == 0
+    assert not_null_by_name["source_candidate_id"] == 0
+    assert "ix_transaction_dedupe_key" in index_names
