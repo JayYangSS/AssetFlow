@@ -21,6 +21,7 @@ from assetflow.uploads import InvalidUploadError
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+ACTIONABLE_REVIEW_STATUSES = {"pending", "needs_review"}
 
 
 def create_ui_router(settings: Settings, get_session: Callable):
@@ -119,16 +120,18 @@ def create_ui_router(settings: Settings, get_session: Callable):
 
     @router.post("/ui/review/{candidate_id}/confirm")
     def confirm_candidate_form(candidate_id: int, db: Session = Depends(get_session)):
-        try:
-            confirm_candidate(db, candidate_id)
-        except ValueError:
-            pass
+        candidate = db.get(CandidateTransaction, candidate_id)
+        if candidate is not None and candidate.review_status in ACTIONABLE_REVIEW_STATUSES:
+            try:
+                confirm_candidate(db, candidate_id)
+            except ValueError:
+                pass
         return RedirectResponse("/ui/review", status_code=303)
 
     @router.post("/ui/review/{candidate_id}/ignore")
     def ignore_candidate_form(candidate_id: int, db: Session = Depends(get_session)):
         candidate = db.get(CandidateTransaction, candidate_id)
-        if candidate is not None:
+        if candidate is not None and candidate.review_status in ACTIONABLE_REVIEW_STATUSES:
             candidate.review_status = "ignored"
             db.add(candidate)
             db.commit()
@@ -174,21 +177,23 @@ def create_ui_router(settings: Settings, get_session: Callable):
         request: Request,
         db: Session = Depends(get_session),
         trade_type: str = Form(),
-        trade_date: date = Form(),
+        trade_date: str = Form(""),
         currency: str = Form(),
-        amount: Decimal = Form(),
+        amount: str = Form(""),
     ):
         try:
+            parsed_trade_date = date.fromisoformat(trade_date)
+            parsed_amount = Decimal(amount)
             create_cash_movement(
                 db,
                 broker="htsc_global",
                 account_alias=None,
                 trade_type=trade_type,
-                trade_date=trade_date,
+                trade_date=parsed_trade_date,
                 currency=currency,
-                amount=amount,
+                amount=parsed_amount,
             )
-        except ValueError as exc:
+        except (ValueError, ArithmeticError) as exc:
             return templates.TemplateResponse(
                 request,
                 "cash.html",

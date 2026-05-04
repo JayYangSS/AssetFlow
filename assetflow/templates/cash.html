@@ -14,7 +14,7 @@
   </label>
   <label>日期 <input type="date" name="trade_date" required></label>
   <label>币种 <input name="currency" value="HKD"></label>
-  <label>金额 <input name="amount" inputmode="decimal"></label>
+  <label>金额 <input name="amount" inputmode="decimal" required></label>
   <button type="submit">记录资金</button>
 </form>
 {% if result %}<section class="panel"><h2>记录结果</h2><p>{{ result }}</p></section>{% endif %}

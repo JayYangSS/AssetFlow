@@ -135,7 +135,29 @@ def test_ui_upload_form_processes_file(settings, session) -> None:
     assert session.exec(select(Upload)).one().source == "web"
 
 
-def test_ui_confirm_and_ignore_candidate_forms(settings, session) -> None:
+def test_ui_ignore_candidate_form_marks_actionable_candidate_ignored(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+    client.post(
+        "/ui/upload",
+        data={"broker": "htsc_global", "account_alias": ""},
+        files={"file": ("trade.png", b"\x89PNG\r\n\x1a\nabc", "image/png")},
+    )
+    candidate = session.exec(select(CandidateTransaction)).one()
+    for tx in session.exec(select(Transaction)).all():
+        session.delete(tx)
+    candidate.review_status = "needs_review"
+    candidate.confirmed_transaction_id = None
+    session.add(candidate)
+    session.commit()
+
+    ignore_response = client.post(f"/ui/review/{candidate.id}/ignore", follow_redirects=False)
+
+    assert ignore_response.status_code == 303
+    session.refresh(candidate)
+    assert candidate.review_status == "ignored"
+
+
+def test_ui_confirm_form_is_safe_for_already_confirmed_candidate(settings, session) -> None:
     client = TestClient(create_app(settings=settings, session=session))
     client.post(
         "/ui/upload",
@@ -144,11 +166,32 @@ def test_ui_confirm_and_ignore_candidate_forms(settings, session) -> None:
     )
     candidate = session.exec(select(CandidateTransaction)).one()
 
+    first_response = client.post(f"/ui/review/{candidate.id}/confirm", follow_redirects=False)
+    second_response = client.post(f"/ui/review/{candidate.id}/confirm", follow_redirects=False)
+
+    assert first_response.status_code == 303
+    assert second_response.status_code == 303
+    session.refresh(candidate)
+    assert candidate.review_status == "confirmed"
+    assert len(session.exec(select(Transaction)).all()) == 1
+
+
+def test_ui_ignore_form_does_not_mutate_confirmed_candidate(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+    client.post(
+        "/ui/upload",
+        data={"broker": "htsc_global", "account_alias": ""},
+        files={"file": ("trade.png", b"\x89PNG\r\n\x1a\nabc", "image/png")},
+    )
+    candidate = session.exec(select(CandidateTransaction)).one()
+
+    confirm_response = client.post(f"/ui/review/{candidate.id}/confirm", follow_redirects=False)
     ignore_response = client.post(f"/ui/review/{candidate.id}/ignore", follow_redirects=False)
 
+    assert confirm_response.status_code == 303
     assert ignore_response.status_code == 303
     session.refresh(candidate)
-    assert candidate.review_status == "ignored"
+    assert candidate.review_status == "confirmed"
 
 
 def test_ui_cash_movement_form_creates_transaction(settings, session) -> None:
@@ -164,3 +207,30 @@ def test_ui_cash_movement_form_creates_transaction(settings, session) -> None:
     tx = session.exec(select(Transaction)).one()
     assert tx.trade_type == "cash_in"
     assert tx.net_amount == Decimal("1000.000000")
+
+
+def test_ui_cash_movement_form_renders_error_for_invalid_amount(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+
+    for amount in ["", "not-a-number"]:
+        response = client.post(
+            "/ui/cash/movements",
+            data={"trade_type": "cash_in", "trade_date": "2026-05-04", "currency": "HKD", "amount": amount},
+        )
+
+        assert response.status_code == 200
+        assert "记录失败" in response.text
+    assert session.exec(select(Transaction)).all() == []
+
+
+def test_ui_cash_movement_form_renders_error_for_invalid_date(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.post(
+        "/ui/cash/movements",
+        data={"trade_type": "cash_in", "trade_date": "not-a-date", "currency": "HKD", "amount": "1000"},
+    )
+
+    assert response.status_code == 200
+    assert "记录失败" in response.text
+    assert session.exec(select(Transaction)).all() == []
