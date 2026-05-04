@@ -59,6 +59,17 @@ def test_upload_page_contains_file_form(settings, session) -> None:
     assert 'name="broker"' in response.text
 
 
+def test_cash_page_contains_cash_movement_form(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get("/ui/cash")
+
+    assert 'action="/ui/cash/movements"' in response.text
+    assert 'name="trade_type"' in response.text
+    assert 'name="trade_date"' in response.text
+    assert 'name="amount"' in response.text
+
+
 def test_ui_serves_static_css(settings, session) -> None:
     client = TestClient(create_app(settings=settings, session=session))
 
