@@ -234,3 +234,19 @@ def test_ui_cash_movement_form_renders_error_for_invalid_date(settings, session)
     assert response.status_code == 200
     assert "记录失败" in response.text
     assert session.exec(select(Transaction)).all() == []
+
+
+def test_ui_export_form_reports_missing_template(settings, session, tmp_path) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.post(
+        "/ui/export",
+        data={
+            "template_path": str(tmp_path / "missing.xlsx"),
+            "output_path": str(tmp_path / "output.xlsx"),
+            "currency": "HKD",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "导出失败" in response.text

@@ -3,18 +3,9 @@
 {% block content %}
 <section class="page-header"><h1>导出 XLSX</h1></section>
 <form class="panel" method="post" action="/ui/export">
-  <label>导出类型
-    <select name="export_type">
-      <option value="transactions">交易流水</option>
-      <option value="positions">持仓</option>
-      <option value="cash">资金流水</option>
-    </select>
-  </label>
-  <label>券商 <input name="broker" placeholder="可选"></label>
-  <label>账户别名 <input name="account_alias" placeholder="可选"></label>
-  <label>币种 <input name="currency" placeholder="可选"></label>
-  <label>开始日期 <input type="date" name="date_from"></label>
-  <label>结束日期 <input type="date" name="date_to"></label>
+  <label>模板路径 <input name="template_path" required></label>
+  <label>输出路径 <input name="output_path" required></label>
+  <label>币种 <input name="currency" value="HKD" required></label>
   <button type="submit">导出</button>
 </form>
 {% if result %}<section class="panel"><h2>导出结果</h2><p>{{ result }}</p></section>{% endif %}

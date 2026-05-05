@@ -17,6 +17,14 @@ Health check:
 Invoke-RestMethod http://127.0.0.1:8787/health
 ```
 
+Dashboard UI:
+
+```powershell
+Start-Process http://127.0.0.1:8787/ui
+```
+
+The local dashboard supports web screenshot upload, candidate review, transaction and position views, cash movement entry, and XLSX export.
+
 Upload endpoint:
 
 ```text

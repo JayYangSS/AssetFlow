@@ -13,8 +13,9 @@ from sqlmodel import select
 from assetflow.cash_movements import create_cash_movement
 from assetflow.config import Settings
 from assetflow.dashboard import dashboard_summary, latest_cash, latest_positions, list_transactions, recent_uploads
+from assetflow.exporters.xlsx_template import export_transactions_to_template
 from assetflow.ledger import confirm_candidate
-from assetflow.models import CandidateTransaction
+from assetflow.models import CandidateTransaction, Transaction
 from assetflow.upload_pipeline import process_uploaded_image
 from assetflow.uploads import InvalidUploadError
 
@@ -213,6 +214,31 @@ def create_ui_router(settings: Settings, get_session: Callable):
             request,
             "export.html",
             {"settings": settings, "active": "export", "result": None, "error": None},
+        )
+
+    @router.post("/ui/export")
+    def export_form(
+        request: Request,
+        db: Session = Depends(get_session),
+        template_path: str = Form(),
+        output_path: str = Form(),
+        currency: str = Form(),
+    ):
+        transactions = db.exec(select(Transaction).where(Transaction.currency == currency)).all()
+        try:
+            export_result = export_transactions_to_template(Path(template_path), Path(output_path), transactions)
+            result = f"导出 {export_result.row_count} 行到 {export_result.output_path}，跳过 {len(export_result.skipped_ids)} 条"
+        except Exception as exc:
+            return templates.TemplateResponse(
+                request,
+                "export.html",
+                {"settings": settings, "active": "export", "result": None, "error": str(exc)},
+            )
+
+        return templates.TemplateResponse(
+            request,
+            "export.html",
+            {"settings": settings, "active": "export", "result": result, "error": None},
         )
 
     return router
