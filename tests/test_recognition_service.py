@@ -78,6 +78,38 @@ def test_process_trade_result_skips_duplicate_candidates_in_same_ocr_result(sett
     assert candidates[0].symbol == "02015"
 
 
+def test_process_trade_result_defaults_htsc_hk_costs_when_missing(settings, session) -> None:
+    upload = store_upload(session, settings, "htsc_global", "ios_shortcut", "trade.png", "image/png", b"\x89PNG\r\n\x1a\nabc")
+    provider = FixtureVisionProvider(Path("tests/fixtures/recognition/trade_history.json"))
+    result = RecognizedScreenshot(
+        screenshot_type="trade_history",
+        confidence=0.96,
+        transactions=[
+            RecognizedTransaction(
+                broker="htsc_global",
+                market="HK",
+                symbol="02015",
+                security_name="Li Auto-W",
+                trade_type="buy",
+                trade_date="2026-04-24",
+                trade_time="09:42:00",
+                quantity=Decimal("100"),
+                price=Decimal("71"),
+                currency="HKD",
+                confidence=0.75,
+            )
+        ],
+    )
+
+    process_recognition_result(session, upload, provider, result)
+
+    candidate = session.exec(select(CandidateTransaction)).one()
+    assert candidate.gross_amount == Decimal("7100.000000")
+    assert candidate.commission == Decimal("0.000000")
+    assert candidate.fees == Decimal("8.900000")
+    assert candidate.net_amount == Decimal("-7108.900000")
+
+
 def test_process_trade_result_skips_duplicate_candidates_across_uploads(settings, session) -> None:
     provider = FixtureVisionProvider(Path("tests/fixtures/recognition/trade_history.json"))
     result = RecognizedScreenshot(

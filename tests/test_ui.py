@@ -370,6 +370,57 @@ def test_ui_edit_candidate_form_updates_and_confirms_candidate(settings, session
     assert transaction.net_amount == Decimal("-40000.000000")
 
 
+def test_ui_edit_candidate_form_defaults_htsc_hk_costs_when_blank(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+    candidate = CandidateTransaction(
+        upload_id=1,
+        ocr_result_id=1,
+        broker="htsc_global",
+        market="HK",
+        symbol="02015",
+        security_name="Li Auto-W",
+        trade_type="buy",
+        trade_date=date(2026, 4, 24),
+        quantity=Decimal("100"),
+        price=Decimal("71"),
+        currency="HKD",
+        dedupe_key="ui-edit-default-costs",
+        confidence=0.75,
+        review_status="needs_review",
+    )
+    session.add(candidate)
+    session.commit()
+    session.refresh(candidate)
+
+    response = client.post(
+        f"/ui/review/{candidate.id}/edit",
+        data={
+            "market": "HK",
+            "symbol": "02015",
+            "security_name": "Li Auto-W",
+            "trade_type": "buy",
+            "trade_date": "2026-04-24",
+            "trade_time": "09:42:00",
+            "quantity": "100",
+            "price": "71",
+            "gross_amount": "",
+            "net_amount": "",
+            "commission": "",
+            "fees": "",
+            "currency": "HKD",
+            "position_balance_after": "",
+        },
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    session.refresh(candidate)
+    assert candidate.gross_amount == Decimal("7100.000000")
+    assert candidate.commission == Decimal("0.000000")
+    assert candidate.fees == Decimal("8.900000")
+    assert candidate.net_amount == Decimal("-7108.900000")
+
+
 def test_ui_ignore_form_does_not_mutate_confirmed_candidate(settings, session) -> None:
     client = TestClient(create_app(settings=settings, session=session))
     client.post(

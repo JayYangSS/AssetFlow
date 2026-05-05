@@ -18,6 +18,7 @@ from assetflow.exporters.xlsx_template import export_transactions_to_template
 from assetflow.export_paths import resolve_export_output_path
 from assetflow.ledger import ACTIONABLE_REVIEW_STATUSES, confirm_candidate, ignore_candidate
 from assetflow.models import CandidateTransaction, Transaction
+from assetflow.transaction_costs import estimate_transaction_costs
 from assetflow.upload_pipeline import process_uploaded_image
 from assetflow.uploads import InvalidUploadError
 
@@ -241,6 +242,17 @@ def create_ui_router(settings: Settings, get_session: Callable):
             parsed_fees = _parse_optional_decimal(fees, "费用")
             parsed_currency = (_clean_optional_text(currency) or "").upper() or None
             parsed_position_balance_after = _parse_optional_decimal(position_balance_after, "成交后持仓")
+            costs = estimate_transaction_costs(
+                broker=candidate.broker,
+                market=parsed_market,
+                trade_type=parsed_trade_type,
+                quantity=parsed_quantity,
+                price=parsed_price,
+                gross_amount=parsed_gross_amount,
+                net_amount=parsed_net_amount,
+                commission=parsed_commission,
+                fees=parsed_fees,
+            )
         except ValueError as exc:
             return render_candidate_edit_response(request, candidate, error=str(exc))
 
@@ -252,10 +264,10 @@ def create_ui_router(settings: Settings, get_session: Callable):
         candidate.trade_time = parsed_trade_time
         candidate.quantity = parsed_quantity
         candidate.price = parsed_price
-        candidate.gross_amount = parsed_gross_amount
-        candidate.net_amount = parsed_net_amount
-        candidate.commission = parsed_commission
-        candidate.fees = parsed_fees
+        candidate.gross_amount = costs.gross_amount
+        candidate.net_amount = costs.net_amount
+        candidate.commission = costs.commission
+        candidate.fees = costs.fees
         candidate.currency = parsed_currency
         candidate.position_balance_after = parsed_position_balance_after
         candidate.review_status = "needs_review"

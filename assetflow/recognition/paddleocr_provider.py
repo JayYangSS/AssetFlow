@@ -244,7 +244,6 @@ def _parse_compact_row(
     ):
         return None
     gross_amount = quantity * price
-    net_amount = -gross_amount if trade_type == "buy" else gross_amount
     return RecognizedTransaction(
         broker=broker,
         market=market,
@@ -256,7 +255,6 @@ def _parse_compact_row(
         quantity=quantity,
         price=price,
         gross_amount=gross_amount,
-        net_amount=net_amount,
         currency=MARKET_CURRENCIES[market],
         confidence=0.75,
     )

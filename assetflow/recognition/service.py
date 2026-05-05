@@ -6,6 +6,7 @@ from assetflow.domain import build_dedupe_key
 from assetflow.models import CandidateTransaction, CashSnapshot, OcrResult, PositionSnapshot, Transaction, Upload
 from assetflow.recognition.providers import VisionProvider
 from assetflow.recognition.schemas import RecognizedScreenshot, RecognizedTransaction
+from assetflow.transaction_costs import estimate_transaction_costs
 
 
 CandidateIdentity = tuple[str, str | None, str, date, time]
@@ -79,6 +80,17 @@ def process_recognition_result(
             if identity in seen_identities or _candidate_identity_exists(session, identity):
                 continue
             seen_identities.add(identity)
+        costs = estimate_transaction_costs(
+            broker=item.broker,
+            market=item.market,
+            trade_type=item.trade_type,
+            quantity=item.quantity,
+            price=item.price,
+            gross_amount=item.gross_amount,
+            net_amount=item.net_amount,
+            commission=item.commission,
+            fees=item.fees,
+        )
         candidate = CandidateTransaction(
             upload_id=upload.id,
             ocr_result_id=ocr.id,
@@ -92,10 +104,10 @@ def process_recognition_result(
             trade_time=item.trade_time,
             quantity=item.quantity,
             price=item.price,
-            gross_amount=item.gross_amount,
-            net_amount=item.net_amount,
-            commission=item.commission,
-            fees=item.fees,
+            gross_amount=costs.gross_amount,
+            net_amount=costs.net_amount,
+            commission=costs.commission,
+            fees=costs.fees,
             currency=item.currency,
             position_balance_after=item.position_balance_after,
             dedupe_key=build_dedupe_key(
@@ -107,7 +119,7 @@ def process_recognition_result(
                 trade_type=item.trade_type,
                 quantity=item.quantity,
                 price=item.price,
-                net_amount=item.net_amount,
+                net_amount=costs.net_amount,
                 currency=item.currency,
             ),
             confidence=item.confidence,

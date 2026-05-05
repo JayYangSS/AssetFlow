@@ -82,11 +82,13 @@ def test_parse_htsc_compact_filled_order_list() -> None:
     assert result.transactions[0].trade_time.isoformat() == "09:30:00"
     assert result.transactions[0].quantity == Decimal("100")
     assert result.transactions[0].price == Decimal("489.000")
-    assert result.transactions[0].net_amount == Decimal("-48900.000")
+    assert result.transactions[0].gross_amount == Decimal("48900.000")
+    assert result.transactions[0].net_amount is None
     assert result.transactions[0].market == "HK"
     assert result.transactions[0].currency == "HKD"
     assert result.transactions[1].trade_type == "sell"
-    assert result.transactions[1].net_amount == Decimal("9000.000")
+    assert result.transactions[1].gross_amount == Decimal("9000.000")
+    assert result.transactions[1].net_amount is None
 
 
 def test_parse_htsc_compact_filled_order_list_accepts_full_dates() -> None:
