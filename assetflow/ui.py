@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal
-from pathlib import Path, PureWindowsPath
+from pathlib import Path
 from typing import Callable
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
@@ -14,7 +14,8 @@ from assetflow.cash_movements import create_cash_movement
 from assetflow.config import Settings
 from assetflow.dashboard import dashboard_summary, latest_cash, latest_positions, list_transactions, recent_uploads
 from assetflow.exporters.xlsx_template import export_transactions_to_template
-from assetflow.ledger import confirm_candidate
+from assetflow.export_paths import resolve_export_output_path
+from assetflow.ledger import ACTIONABLE_REVIEW_STATUSES, confirm_candidate, ignore_candidate
 from assetflow.models import CandidateTransaction, Transaction
 from assetflow.upload_pipeline import process_uploaded_image
 from assetflow.uploads import InvalidUploadError
@@ -22,30 +23,7 @@ from assetflow.uploads import InvalidUploadError
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
-ACTIONABLE_REVIEW_STATUSES = {"pending", "needs_review"}
-
-
-def _resolve_export_output_path(settings: Settings, output_path: str) -> Path:
-    stripped_output_path = output_path.strip()
-    windows_output = PureWindowsPath(stripped_output_path)
-    if not stripped_output_path or windows_output.is_absolute() or windows_output.drive:
-        raise ValueError("Output path must be a file name or relative path under the export directory.")
-    if ".." in windows_output.parts:
-        raise ValueError("Output path must not contain '..'.")
-
-    relative_output = Path(stripped_output_path)
-    if relative_output.is_absolute() or relative_output.drive:
-        raise ValueError("Output path must be a file name or relative path under the export directory.")
-    if ".." in relative_output.parts:
-        raise ValueError("Output path must not contain '..'.")
-
-    export_dir = settings.export_dir.resolve()
-    resolved_output = (export_dir / relative_output).resolve()
-    try:
-        resolved_output.relative_to(export_dir)
-    except ValueError as exc:
-        raise ValueError("Output path must stay under the export directory.") from exc
-    return resolved_output
+_resolve_export_output_path = resolve_export_output_path
 
 
 def create_ui_router(settings: Settings, get_session: Callable):
@@ -156,9 +134,10 @@ def create_ui_router(settings: Settings, get_session: Callable):
     def ignore_candidate_form(candidate_id: int, db: Session = Depends(get_session)):
         candidate = db.get(CandidateTransaction, candidate_id)
         if candidate is not None and candidate.review_status in ACTIONABLE_REVIEW_STATUSES:
-            candidate.review_status = "ignored"
-            db.add(candidate)
-            db.commit()
+            try:
+                ignore_candidate(db, candidate_id)
+            except ValueError:
+                pass
         return RedirectResponse("/ui/review", status_code=303)
 
     @router.get("/ui/transactions")

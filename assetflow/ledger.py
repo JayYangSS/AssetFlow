@@ -14,6 +14,7 @@ REQUIRED_FIELDS = (
     "net_amount",
     "currency",
 )
+ACTIONABLE_REVIEW_STATUSES = {"pending", "needs_review"}
 
 
 def candidate_is_complete(candidate: CandidateTransaction) -> bool:
@@ -41,7 +42,13 @@ def candidate_can_auto_confirm(candidate: CandidateTransaction, min_confidence: 
 def confirm_candidate(session: Session, candidate_id: int) -> Transaction:
     candidate = session.get(CandidateTransaction, candidate_id)
     if candidate is None:
-        raise ValueError(f"Candidate not found: {candidate_id}")
+        raise LookupError(f"Candidate not found: {candidate_id}")
+    if candidate.review_status == "confirmed" and candidate.confirmed_transaction_id is not None:
+        existing_confirmed = session.get(Transaction, candidate.confirmed_transaction_id)
+        if existing_confirmed is not None:
+            return existing_confirmed
+    if candidate.review_status not in ACTIONABLE_REVIEW_STATUSES:
+        raise ValueError(f"Candidate status is not actionable: {candidate.review_status}")
     existing = session.exec(select(Transaction).where(Transaction.dedupe_key == candidate.dedupe_key)).first()
     if existing is not None:
         candidate.review_status = "duplicate"
@@ -87,6 +94,19 @@ def confirm_candidate(session: Session, candidate_id: int) -> Transaction:
     session.add(candidate)
     session.commit()
     return transaction
+
+
+def ignore_candidate(session: Session, candidate_id: int) -> CandidateTransaction:
+    candidate = session.get(CandidateTransaction, candidate_id)
+    if candidate is None:
+        raise LookupError(f"Candidate not found: {candidate_id}")
+    if candidate.review_status not in ACTIONABLE_REVIEW_STATUSES:
+        raise ValueError(f"Candidate status is not actionable: {candidate.review_status}")
+    candidate.review_status = "ignored"
+    session.add(candidate)
+    session.commit()
+    session.refresh(candidate)
+    return candidate
 
 
 def auto_confirm_candidates(session: Session, min_confidence: float = 0.90) -> int:

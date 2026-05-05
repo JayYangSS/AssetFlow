@@ -1,9 +1,11 @@
 from datetime import date
 from decimal import Decimal
+from hashlib import sha256
+from uuid import uuid4
 
 from sqlmodel import Session, select
 
-from assetflow.domain import SUPPORTED_BROKERS, SUPPORTED_CURRENCIES, build_dedupe_key
+from assetflow.domain import SUPPORTED_BROKERS, SUPPORTED_CURRENCIES
 from assetflow.models import Transaction
 
 
@@ -20,6 +22,7 @@ def create_cash_movement(
     trade_date: date,
     currency: str,
     amount: Decimal,
+    idempotency_key: str | None = None,
 ) -> Transaction:
     if broker not in SUPPORTED_BROKERS:
         raise ValueError(f"Unsupported broker: {broker}")
@@ -29,18 +32,7 @@ def create_cash_movement(
         raise ValueError(f"Unsupported cash movement type: {trade_type}")
 
     net_amount = _normalize_decimal(_signed_net_amount(trade_type, amount))
-    dedupe_key = build_dedupe_key(
-        broker=broker,
-        account_alias=account_alias,
-        trade_date=trade_date,
-        trade_time=None,
-        symbol="CASH",
-        trade_type=trade_type,
-        quantity=_normalize_decimal(Decimal("0")),
-        price=_normalize_decimal(Decimal("0")),
-        net_amount=net_amount,
-        currency=currency,
-    )
+    dedupe_key = _manual_cash_dedupe_key(idempotency_key)
     existing = session.exec(select(Transaction).where(Transaction.dedupe_key == dedupe_key)).first()
     if existing is not None:
         return existing
@@ -78,3 +70,10 @@ def _signed_net_amount(trade_type: str, amount: Decimal) -> Decimal:
 
 def _normalize_decimal(value: Decimal) -> Decimal:
     return value.normalize()
+
+
+def _manual_cash_dedupe_key(idempotency_key: str | None) -> str:
+    if idempotency_key is None or not idempotency_key.strip():
+        return f"manual-cash:{uuid4().hex}"
+    hashed_key = sha256(idempotency_key.encode("utf-8")).hexdigest()
+    return f"manual-cash:idempotent:{hashed_key}"

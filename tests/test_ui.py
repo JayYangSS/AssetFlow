@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from openpyxl import Workbook
 from sqlmodel import select
 
-import assetflow.ui as ui_module
+import assetflow.export_paths as export_paths_module
 from assetflow.api import create_app
 from assetflow.exporters.xlsx_template import EXPECTED_HEADERS
 from assetflow.models import CandidateTransaction, Transaction, Upload
@@ -301,7 +301,7 @@ def test_ui_export_form_rejects_unsafe_output_paths(settings, session, tmp_path)
 
 
 def test_resolve_export_output_path_rejects_windows_style_paths_on_posix(monkeypatch) -> None:
-    monkeypatch.setattr(ui_module, "Path", _PosixOnlyPath)
+    monkeypatch.setattr(export_paths_module, "Path", _PosixOnlyPath)
 
     class SettingsStub:
         export_dir = _PosixOnlyPath("/exports")
@@ -315,7 +315,7 @@ def test_resolve_export_output_path_rejects_windows_style_paths_on_posix(monkeyp
 
     for output_path in unsafe_outputs:
         with pytest.raises(ValueError):
-            ui_module._resolve_export_output_path(SettingsStub(), output_path)
+            export_paths_module.resolve_export_output_path(SettingsStub(), output_path)
 
 
 def test_ui_export_form_writes_relative_output_under_export_dir(settings, session, tmp_path) -> None:

@@ -2,6 +2,8 @@ from pathlib import Path
 
 from sqlmodel import select
 
+import pytest
+
 from assetflow.ledger import auto_confirm_candidates, confirm_candidate
 from assetflow.models import CandidateTransaction, Transaction
 from assetflow.recognition.providers import FixtureVisionProvider
@@ -36,3 +38,30 @@ def test_confirm_candidate_does_not_duplicate(settings, session) -> None:
 
     assert first.id == second.id
     assert len(session.exec(select(Transaction)).all()) == 1
+
+
+def test_confirm_candidate_second_call_keeps_confirmed_status(settings, session) -> None:
+    candidate = _load_candidate(settings, session)
+
+    first = confirm_candidate(session, candidate.id)
+    second = confirm_candidate(session, candidate.id)
+
+    session.refresh(candidate)
+    assert first.id == second.id
+    assert candidate.review_status == "confirmed"
+    assert candidate.confirmed_transaction_id == first.id
+    assert len(session.exec(select(Transaction)).all()) == 1
+
+
+def test_confirm_candidate_rejects_ignored_candidate(settings, session) -> None:
+    candidate = _load_candidate(settings, session)
+    candidate.review_status = "ignored"
+    session.add(candidate)
+    session.commit()
+
+    with pytest.raises(ValueError):
+        confirm_candidate(session, candidate.id)
+
+    session.refresh(candidate)
+    assert candidate.review_status == "ignored"
+    assert session.exec(select(Transaction)).all() == []

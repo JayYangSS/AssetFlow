@@ -11,8 +11,9 @@ from assetflow.cash_movements import create_cash_movement
 from assetflow.config import Settings
 from assetflow.dashboard import dashboard_summary, latest_cash, latest_positions, list_transactions, recent_uploads
 from assetflow.db import create_db_and_tables, make_engine
+from assetflow.export_paths import resolve_export_output_path
 from assetflow.exporters.xlsx_template import export_transactions_to_template
-from assetflow.ledger import confirm_candidate
+from assetflow.ledger import confirm_candidate, ignore_candidate as ignore_candidate_action
 from assetflow.models import CandidateTransaction, Transaction
 from assetflow.reconciliation import reconcile_positions
 from assetflow.ui import create_ui_router, mount_static
@@ -27,6 +28,7 @@ class CashMovementRequest(BaseModel):
     trade_date: date
     currency: str
     amount: Decimal
+    idempotency_key: str | None = None
 
 
 def create_app(settings: Settings | None = None, session: Session | None = None) -> FastAPI:
@@ -93,17 +95,22 @@ def create_app(settings: Settings | None = None, session: Session | None = None)
 
     @app.post("/api/review/candidates/{candidate_id}/confirm")
     def confirm(candidate_id: int, db: Annotated[Session, Depends(get_session)]) -> dict[str, int | None]:
-        tx = confirm_candidate(db, candidate_id)
+        try:
+            tx = confirm_candidate(db, candidate_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"transaction_id": tx.id}
 
     @app.post("/api/review/candidates/{candidate_id}/ignore")
     def ignore_candidate(candidate_id: int, db: Annotated[Session, Depends(get_session)]) -> dict[str, int]:
-        candidate = db.get(CandidateTransaction, candidate_id)
-        if candidate is None:
-            raise HTTPException(status_code=404, detail=f"Candidate not found: {candidate_id}")
-        candidate.review_status = "ignored"
-        db.add(candidate)
-        db.commit()
+        try:
+            ignore_candidate_action(db, candidate_id)
+        except LookupError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"candidate_id": candidate_id}
 
     @app.post("/api/cash/movements")
@@ -117,6 +124,7 @@ def create_app(settings: Settings | None = None, session: Session | None = None)
                 trade_date=request.trade_date,
                 currency=request.currency,
                 amount=request.amount,
+                idempotency_key=request.idempotency_key,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -134,7 +142,11 @@ def create_app(settings: Settings | None = None, session: Session | None = None)
         db: Session = Depends(get_session),
     ) -> dict[str, object]:
         transactions = db.exec(select(Transaction).where(Transaction.currency == currency)).all()
-        result = export_transactions_to_template(Path(template_path), Path(output_path), transactions)
+        try:
+            resolved_output_path = resolve_export_output_path(settings, output_path)
+            result = export_transactions_to_template(Path(template_path), resolved_output_path, transactions)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         return {"output_path": str(result.output_path), "row_count": result.row_count, "skipped_ids": result.skipped_ids}
 
     @app.get("/api/dashboard/summary")
