@@ -102,7 +102,7 @@ def _parse_decimal(value: str | None) -> Decimal | None:
     if not value:
         return None
     cleaned = value.replace(",", "").strip()
-    match = re.search(r"-?\d+(?:\.\d+)?", cleaned)
+    match = re.search(r"[-+]?\d+(?:\.\d+)?", cleaned)
     if not match:
         return None
     try:
@@ -203,7 +203,7 @@ def _looks_like_market_symbol(value: str) -> bool:
 
 
 def _looks_like_compact_number(value: str) -> bool:
-    return bool(re.fullmatch(r"-?\d+(?:\.\d+)?", value.strip().replace(",", "")))
+    return bool(re.fullmatch(r"[-+]?\d+(?:\.\d+)?", value.strip().replace(",", "")))
 
 
 def _is_percentage(value: str) -> bool:
@@ -228,7 +228,7 @@ def _looks_like_position_name(value: str) -> bool:
         "M",
     }:
         return False
-    if _parse_market(normalized) is not None or _looks_like_symbol(normalized):
+    if _parse_market(normalized) is not None or _looks_like_symbol(normalized) or _looks_like_market_symbol(normalized):
         return False
     if _parse_decimal(normalized) is not None and _looks_like_compact_number(normalized):
         return False
@@ -237,23 +237,36 @@ def _looks_like_position_name(value: str) -> bool:
     return bool(re.search(r"[\u4e00-\u9fffA-Za-z]", normalized))
 
 
-def _extract_position_market_symbol(lines: list[str], start_index: int) -> tuple[str | None, str | None, int]:
-    first_line = lines[start_index].strip() if start_index < len(lines) else ""
-    match = re.search(r"\b(HK|US|SH|SZ)\s*(\d{4,6})\b", first_line.upper())
-    if match:
-        market, symbol = match.groups()
-        return market, symbol, start_index + 1
+def _extract_position_market_symbol(row_lines: list[str]) -> tuple[str | None, str | None, int, int]:
+    for index, line in enumerate(row_lines):
+        match = re.search(r"\b(HK|US|SH|SZ)\s*(\d{4,6})\b", line.strip().upper())
+        if match:
+            market, symbol = match.groups()
+            return market, symbol, index, index + 1
 
-    market = _parse_market(first_line)
-    symbol_index = start_index + 1
-    symbol = lines[symbol_index].strip() if symbol_index < len(lines) and _looks_like_symbol(lines[symbol_index]) else None
-    if market is None or symbol is None:
-        return None, None, start_index
+        market = _parse_market(line)
+        if market is None:
+            continue
+        symbol_index = index + 1
+        if symbol_index >= len(row_lines) or not _looks_like_symbol(row_lines[symbol_index]):
+            continue
+        cursor = symbol_index + 1
+        while cursor < len(row_lines) and row_lines[cursor].strip() in {"M"}:
+            cursor += 1
+        return market, row_lines[symbol_index].strip(), index, cursor
+    return None, None, -1, -1
 
-    cursor = symbol_index + 1
-    while cursor < len(lines) and lines[cursor].strip() in {"M"}:
-        cursor += 1
-    return market, symbol, cursor
+
+def _position_numbers(lines: list[str]) -> list[Decimal]:
+    numbers: list[Decimal] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped == "--" or _is_percentage(stripped):
+            continue
+        value = _parse_decimal(stripped)
+        if value is not None and _looks_like_compact_number(stripped):
+            numbers.append(value)
+    return numbers
 
 
 def _parse_compact_row(
@@ -354,43 +367,46 @@ def _parse_position_rows(lines: list[str], broker: str) -> list[RecognizedPositi
             continue
         if index + 1 >= len(lines):
             break
-        market, symbol, cursor = _extract_position_market_symbol(lines, index + 1)
-        if market is None or symbol is None:
-            index += 1
-            continue
-
-        values: list[Decimal] = []
-        while cursor < len(lines):
-            line = lines[cursor].strip()
-            if _looks_like_position_name(line):
-                break
-            if _is_percentage(line):
-                cursor += 1
-                break
-            if line != "--":
-                value = _parse_decimal(line)
-                if value is not None and _looks_like_compact_number(line):
-                    values.append(value)
+        cursor = index + 1
+        while cursor < len(lines) and not _looks_like_position_name(lines[cursor]):
             cursor += 1
 
-        if len(values) >= 2:
-            positions.append(
-                RecognizedPosition(
-                    broker=broker,
-                    market=market,
-                    symbol=symbol,
-                    security_name=security_name,
-                    market_value=values[0],
-                    quantity=values[1],
-                    unrealized_pnl=values[2] if len(values) >= 3 else None,
-                    currency=MARKET_CURRENCIES[market],
-                    snapshot_at=snapshot_at,
-                    confidence=0.75,
-                )
-            )
+        row_lines = lines[index + 1 : cursor]
+        market, symbol, marker_start, marker_end = _extract_position_market_symbol(row_lines)
+        if market is None or symbol is None:
             index = cursor
             continue
-        index += 1
+
+        values_before_marker = _position_numbers(row_lines[:marker_start])
+        values_after_marker = _position_numbers(row_lines[marker_end:])
+        values = values_before_marker + values_after_marker
+        if len(values_before_marker) >= 2 and values_after_marker:
+            market_value = values_before_marker[0]
+            unrealized_pnl = values_before_marker[1]
+            quantity = values_after_marker[0]
+        elif len(values) >= 2:
+            market_value = values[0]
+            quantity = values[1]
+            unrealized_pnl = values[2] if len(values) >= 3 else None
+        else:
+            index = cursor
+            continue
+
+        positions.append(
+            RecognizedPosition(
+                broker=broker,
+                market=market,
+                symbol=symbol,
+                security_name=security_name,
+                market_value=market_value,
+                quantity=quantity,
+                unrealized_pnl=unrealized_pnl,
+                currency=MARKET_CURRENCIES[market],
+                snapshot_at=snapshot_at,
+                confidence=0.75,
+            )
+        )
+        index = cursor
     return positions
 
 

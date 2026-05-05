@@ -213,40 +213,56 @@ def test_parse_htsc_positions_watchlist_screenshot() -> None:
             "市值|数量",
             "今日盈亏",
             "腾讯控股",
-            "HK 00700 M",
             "47,220.00",
-            "100",
             "-80.00",
+            "HK",
+            "00700",
+            "M",
+            "100",
             "-0.16%",
             "天星医疗",
+            "0.00",
+            "16,239.68",
             "HK",
             "01609",
             "0.00",
-            "0.00",
-            "16,239.68",
-            "--",
             "理想汽车-W",
+            "13,930.00",
+            "-100.00",
             "HK",
             "02015",
-            "13,930.00",
             "200",
-            "-100.00",
             "-0.71%",
             "美团-W",
+            "33,420.00",
+            "-360.00",
             "HK",
             "03690",
             "M",
-            "33,420.00",
             "400",
-            "-360.00",
             "-1.06%",
+            "地平线机器人-W",
+            "207,270.00",
+            "-9,702.00",
+            "HK",
+            "09660",
+            "29,400",
+            "-4.47%",
+            "阿里巴巴-W",
+            "91,840.00",
+            "-350.00",
+            "HK",
+            "09988",
+            "M",
+            "700",
+            "-0.37%",
         ],
         broker="htsc_global",
     )
 
     assert result.screenshot_type == "positions"
     assert result.confidence == 0.75
-    assert len(result.positions) == 4
+    assert len(result.positions) == 6
     assert result.positions[0].security_name == "腾讯控股"
     assert result.positions[0].market == "HK"
     assert result.positions[0].symbol == "00700"
@@ -257,6 +273,9 @@ def test_parse_htsc_positions_watchlist_screenshot() -> None:
     assert result.positions[2].security_name == "理想汽车-W"
     assert result.positions[2].symbol == "02015"
     assert result.positions[2].quantity == Decimal("200")
+    assert result.positions[4].security_name == "地平线机器人-W"
+    assert result.positions[4].quantity == Decimal("29400")
+    assert result.positions[5].symbol == "09988"
 
 
 def test_make_provider_creates_paddleocr_provider() -> None:
