@@ -30,7 +30,7 @@
     <h2>最近交易</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>日期</th><th>代码</th><th>类型</th><th>数量</th><th>净额</th></tr></thead>
+        <thead><tr><th>日期</th><th>代码</th><th>类型</th><th>数量</th><th>现金变动</th></tr></thead>
         <tbody>
         {% for item in summary.recent_transactions %}
           <tr><td>{{ item.trade_date }}</td><td>{{ item.symbol }}</td><td>{{ item.trade_type }}</td><td>{{ item.quantity }}</td><td>{{ item.net_amount }} {{ item.currency }}</td></tr>

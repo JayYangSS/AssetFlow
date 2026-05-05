@@ -236,7 +236,7 @@ def create_ui_router(settings: Settings, get_session: Callable):
             parsed_quantity = _parse_optional_decimal(quantity, "数量")
             parsed_price = _parse_optional_decimal(price, "价格")
             parsed_gross_amount = _parse_optional_decimal(gross_amount, "成交金额")
-            parsed_net_amount = _parse_optional_decimal(net_amount, "净额")
+            parsed_net_amount = _parse_optional_decimal(net_amount, "现金变动")
             parsed_commission = _parse_optional_decimal(commission, "佣金")
             parsed_fees = _parse_optional_decimal(fees, "费用")
             parsed_currency = (_clean_optional_text(currency) or "").upper() or None

@@ -21,7 +21,7 @@ REQUIRED_FIELD_LABELS = {
     "trade_date": "交易日期",
     "quantity": "数量",
     "price": "价格",
-    "net_amount": "净额",
+    "net_amount": "现金变动",
     "currency": "币种",
 }
 ACTIONABLE_REVIEW_STATUSES = {"pending", "needs_review"}

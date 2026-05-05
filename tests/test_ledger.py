@@ -97,7 +97,7 @@ def test_confirm_candidate_reports_missing_required_field_names(settings, sessio
     message = str(exc_info.value)
     assert "缺失字段" in message
     assert "证券代码" in message
-    assert "净额" in message
+    assert "现金变动" in message
     session.refresh(candidate)
     assert candidate.review_status == "needs_review"
     assert "证券代码" in candidate.review_notes

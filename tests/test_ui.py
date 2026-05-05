@@ -162,6 +162,34 @@ def test_ui_dashboard_renders_pending_review_count(settings, session) -> None:
     assert "<span>待审核</span><strong>1</strong>" in response.text
 
 
+def test_ui_transaction_tables_label_net_amount_as_cash_change(settings, session) -> None:
+    tx = Transaction(
+        broker="htsc_global",
+        market="HK",
+        symbol="00700",
+        security_name="Tencent",
+        trade_type="buy",
+        trade_date=date(2026, 5, 4),
+        quantity=Decimal("100"),
+        price=Decimal("400"),
+        net_amount=Decimal("-40000"),
+        currency="HKD",
+        dedupe_key="ui-cash-change-label",
+        confidence=0.95,
+    )
+    session.add(tx)
+    session.commit()
+    client = TestClient(create_app(settings=settings, session=session))
+
+    dashboard_response = client.get("/ui")
+    transactions_response = client.get("/ui/transactions")
+
+    assert dashboard_response.status_code == 200
+    assert transactions_response.status_code == 200
+    assert "现金变动" in dashboard_response.text
+    assert "现金变动" in transactions_response.text
+
+
 def test_ui_upload_form_processes_file(settings, session) -> None:
     client = TestClient(create_app(settings=settings, session=session))
 
@@ -275,6 +303,7 @@ def test_ui_review_page_links_to_candidate_edit_form(settings, session) -> None:
     assert response.status_code == 200
     assert f'href="/ui/review/{candidate.id}/edit"' in response.text
     assert "编辑" in response.text
+    assert "现金变动" in response.text
 
 
 def test_ui_edit_candidate_form_updates_and_confirms_candidate(settings, session) -> None:
@@ -303,6 +332,7 @@ def test_ui_edit_candidate_form_updates_and_confirms_candidate(settings, session
 
     assert edit_response.status_code == 200
     assert "编辑候选交易" in edit_response.text
+    assert "现金变动" in edit_response.text
     assert 'name="net_amount"' in edit_response.text
 
     save_response = client.post(
