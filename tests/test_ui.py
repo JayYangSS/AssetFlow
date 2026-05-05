@@ -90,6 +90,16 @@ def test_ui_core_pages_return_200(settings, session) -> None:
         assert expected in response.text
 
 
+def test_ui_positions_page_labels_daily_and_holding_pnl(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get("/ui/positions")
+
+    assert response.status_code == 200
+    assert "今日盈亏" in response.text
+    assert "持仓盈亏" in response.text
+
+
 def test_upload_page_contains_file_form(settings, session) -> None:
     client = TestClient(create_app(settings=settings, session=session))
 

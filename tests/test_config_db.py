@@ -93,6 +93,34 @@ def insert_legacy_transaction_row(engine: Engine, *, row_id: int = 1, dedupe_key
         )
 
 
+def create_legacy_position_snapshot_table_without_daily_pnl(engine: Engine) -> None:
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            """
+            CREATE TABLE positionsnapshot (
+                id INTEGER PRIMARY KEY,
+                upload_id INTEGER NOT NULL,
+                ocr_result_id INTEGER NOT NULL,
+                broker VARCHAR NOT NULL,
+                account_alias VARCHAR,
+                market VARCHAR,
+                symbol VARCHAR NOT NULL,
+                security_name VARCHAR,
+                quantity NUMERIC(20, 6) NOT NULL,
+                available_quantity NUMERIC(20, 6),
+                cost_price NUMERIC(20, 6),
+                market_price NUMERIC(20, 6),
+                market_value NUMERIC(20, 6),
+                unrealized_pnl NUMERIC(20, 6),
+                currency VARCHAR NOT NULL,
+                snapshot_at DATETIME NOT NULL,
+                confidence FLOAT NOT NULL,
+                created_at DATETIME NOT NULL
+            )
+            """
+        )
+
+
 def test_settings_builds_data_directories(tmp_path: Path) -> None:
     settings = Settings(
         assetflow_data_dir=tmp_path / "data",
@@ -165,6 +193,24 @@ def test_create_db_and_tables_relaxes_manual_transaction_source_columns(tmp_path
     assert not_null_by_name["source_candidate_id"] == 0
     assert "ix_transaction_dedupe_key" in index_names
     assert saved == [(1, "legacy-key")]
+
+
+def test_create_db_and_tables_adds_position_daily_pnl_column(tmp_path: Path) -> None:
+    settings = Settings(
+        assetflow_data_dir=tmp_path / "data",
+        assetflow_upload_token="secret-token",
+        assetflow_recognition_provider="fixture",
+    )
+    settings.ensure_directories()
+    engine = make_engine(settings.database_url)
+    create_legacy_position_snapshot_table_without_daily_pnl(engine)
+
+    create_db_and_tables(engine)
+
+    with engine.connect() as connection:
+        rows = connection.exec_driver_sql('PRAGMA table_info("positionsnapshot")').all()
+    column_names = {row[1] for row in rows}
+    assert "daily_pnl" in column_names
 
 
 def test_sqlite_engine_uses_wal_and_busy_timeout(tmp_path: Path) -> None:

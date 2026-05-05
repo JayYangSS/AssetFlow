@@ -400,7 +400,7 @@ def _parse_position_rows(lines: list[str], broker: str) -> list[RecognizedPositi
                 security_name=security_name,
                 market_value=market_value,
                 quantity=quantity,
-                unrealized_pnl=unrealized_pnl,
+                daily_pnl=unrealized_pnl,
                 currency=MARKET_CURRENCIES[market],
                 snapshot_at=snapshot_at,
                 confidence=0.75,

@@ -110,6 +110,7 @@ class PositionSnapshot(SQLModel, table=True):
     cost_price: Decimal | None = Field(default=None, sa_column=money_column())
     market_price: Decimal | None = Field(default=None, sa_column=money_column())
     market_value: Decimal | None = Field(default=None, sa_column=money_column())
+    daily_pnl: Decimal | None = Field(default=None, sa_column=money_column())
     unrealized_pnl: Decimal | None = Field(default=None, sa_column=money_column())
     currency: str
     snapshot_at: datetime

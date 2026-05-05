@@ -269,7 +269,8 @@ def test_parse_htsc_positions_watchlist_screenshot() -> None:
     assert result.positions[0].market_value == Decimal("47220.00")
     assert result.positions[0].quantity == Decimal("100")
     assert result.positions[0].currency == "HKD"
-    assert result.positions[0].unrealized_pnl == Decimal("-80.00")
+    assert result.positions[0].daily_pnl == Decimal("-80.00")
+    assert result.positions[0].unrealized_pnl is None
     assert result.positions[2].security_name == "理想汽车-W"
     assert result.positions[2].symbol == "02015"
     assert result.positions[2].quantity == Decimal("200")

@@ -10,6 +10,7 @@ from assetflow.transaction_costs import estimate_transaction_costs
 
 
 CandidateIdentity = tuple[str, str | None, str, date, time]
+PositionIdentity = tuple[str, str | None, str | None, str, str]
 
 
 def _candidate_identity(item: RecognizedTransaction) -> CandidateIdentity | None:
@@ -51,6 +52,35 @@ def _candidate_identity_exists(session: Session, identity: CandidateIdentity) ->
         ).first()
         is not None
     )
+
+
+def _position_identity(item) -> PositionIdentity:
+    return (item.broker, item.account_alias, item.market, item.symbol, item.currency)
+
+
+def _latest_position_snapshot(session: Session, identity: PositionIdentity) -> PositionSnapshot | None:
+    broker, account_alias, market, symbol, currency = identity
+    account_filter = (
+        PositionSnapshot.account_alias.is_(None)
+        if account_alias is None
+        else PositionSnapshot.account_alias == account_alias
+    )
+    market_filter = PositionSnapshot.market.is_(None) if market is None else PositionSnapshot.market == market
+    return session.exec(
+        select(PositionSnapshot)
+        .where(
+            PositionSnapshot.broker == broker,
+            account_filter,
+            market_filter,
+            PositionSnapshot.symbol == symbol,
+            PositionSnapshot.currency == currency,
+        )
+        .order_by(PositionSnapshot.snapshot_at.desc(), PositionSnapshot.id.desc())
+    ).first()
+
+
+def _merge_value(new_value, old_value):
+    return new_value if new_value is not None else old_value
 
 
 def process_recognition_result(
@@ -128,6 +158,7 @@ def process_recognition_result(
         session.add(candidate)
 
     for item in result.positions:
+        previous = _latest_position_snapshot(session, _position_identity(item))
         session.add(
             PositionSnapshot(
                 upload_id=upload.id,
@@ -136,13 +167,16 @@ def process_recognition_result(
                 account_alias=item.account_alias,
                 market=item.market,
                 symbol=item.symbol,
-                security_name=item.security_name,
+                security_name=_merge_value(item.security_name, previous.security_name if previous else None),
                 quantity=item.quantity,
-                available_quantity=item.available_quantity,
-                cost_price=item.cost_price,
-                market_price=item.market_price,
-                market_value=item.market_value,
-                unrealized_pnl=item.unrealized_pnl,
+                available_quantity=_merge_value(
+                    item.available_quantity, previous.available_quantity if previous else None
+                ),
+                cost_price=_merge_value(item.cost_price, previous.cost_price if previous else None),
+                market_price=_merge_value(item.market_price, previous.market_price if previous else None),
+                market_value=_merge_value(item.market_value, previous.market_value if previous else None),
+                daily_pnl=_merge_value(item.daily_pnl, previous.daily_pnl if previous else None),
+                unrealized_pnl=_merge_value(item.unrealized_pnl, previous.unrealized_pnl if previous else None),
                 currency=item.currency,
                 snapshot_at=item.snapshot_at,
                 confidence=item.confidence,

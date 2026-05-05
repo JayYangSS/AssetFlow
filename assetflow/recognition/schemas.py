@@ -39,6 +39,7 @@ class RecognizedPosition(BaseModel):
     cost_price: Decimal | None = None
     market_price: Decimal | None = None
     market_value: Decimal | None = None
+    daily_pnl: Decimal | None = None
     unrealized_pnl: Decimal | None = None
     currency: str
     snapshot_at: datetime

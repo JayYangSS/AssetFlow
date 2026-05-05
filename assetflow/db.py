@@ -23,6 +23,7 @@ def make_engine(database_url: str) -> Engine:
 
 def create_db_and_tables(engine: Engine) -> None:
     _relax_sqlite_transaction_source_columns(engine)
+    _add_sqlite_column_if_missing(engine, "positionsnapshot", "daily_pnl", "NUMERIC(20, 6)")
     SQLModel.metadata.create_all(engine)
 
 
@@ -74,6 +75,20 @@ def _relax_sqlite_transaction_source_columns(engine: Engine) -> None:
                 connection.exec_driver_sql(index_sql)
 
         connection.exec_driver_sql(f'DROP TABLE "{legacy_table}"')
+
+
+def _add_sqlite_column_if_missing(engine: Engine, table_name: str, column_name: str, column_sql: str) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+
+    with engine.begin() as connection:
+        if not _sqlite_table_exists(connection, table_name):
+            return
+        rows = connection.exec_driver_sql(f'PRAGMA table_info("{table_name}")').all()
+        column_names = {row[1] for row in rows}
+        if column_name in column_names:
+            return
+        connection.exec_driver_sql(f'ALTER TABLE "{table_name}" ADD COLUMN "{column_name}" {column_sql}')
 
 
 def _sqlite_unique_table_name(connection, base_name: str) -> str:
