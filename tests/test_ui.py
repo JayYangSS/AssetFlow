@@ -1,11 +1,22 @@
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 from fastapi.testclient import TestClient
+from openpyxl import Workbook
 from sqlmodel import select
 
 from assetflow.api import create_app
+from assetflow.exporters.xlsx_template import EXPECTED_HEADERS
 from assetflow.models import CandidateTransaction, Transaction, Upload
+
+
+def _make_export_template(path: Path) -> Path:
+    wb = Workbook()
+    ws = wb.active
+    ws.append(EXPECTED_HEADERS)
+    wb.save(path)
+    return path
 
 
 def test_ui_dashboard_page_returns_html(settings, session) -> None:
@@ -236,6 +247,46 @@ def test_ui_cash_movement_form_renders_error_for_invalid_date(settings, session)
     assert session.exec(select(Transaction)).all() == []
 
 
+def test_ui_export_form_rejects_unsafe_output_paths(settings, session, tmp_path) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+    template_path = _make_export_template(tmp_path / "template.xlsx")
+    unsafe_outputs = [
+        (str(tmp_path / "outside.xlsx"), tmp_path / "outside.xlsx"),
+        ("../outside.xlsx", settings.export_dir.parent / "outside.xlsx"),
+    ]
+
+    for output_path, outside_output in unsafe_outputs:
+        response = client.post(
+            "/ui/export",
+            data={
+                "template_path": str(template_path),
+                "output_path": output_path,
+                "currency": "HKD",
+            },
+        )
+
+        assert response.status_code == 200
+        assert "导出失败" in response.text
+        assert not outside_output.exists()
+
+
+def test_ui_export_form_writes_relative_output_under_export_dir(settings, session, tmp_path) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+    template_path = _make_export_template(tmp_path / "template.xlsx")
+
+    response = client.post(
+        "/ui/export",
+        data={
+            "template_path": str(template_path),
+            "output_path": "reports/output.xlsx",
+            "currency": "HKD",
+        },
+    )
+
+    assert response.status_code == 200
+    assert (settings.export_dir / "reports" / "output.xlsx").exists()
+
+
 def test_ui_export_form_reports_missing_template(settings, session, tmp_path) -> None:
     client = TestClient(create_app(settings=settings, session=session))
 
@@ -243,7 +294,7 @@ def test_ui_export_form_reports_missing_template(settings, session, tmp_path) ->
         "/ui/export",
         data={
             "template_path": str(tmp_path / "missing.xlsx"),
-            "output_path": str(tmp_path / "output.xlsx"),
+            "output_path": "output.xlsx",
             "currency": "HKD",
         },
     )

@@ -25,6 +25,22 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 ACTIONABLE_REVIEW_STATUSES = {"pending", "needs_review"}
 
 
+def _resolve_export_output_path(settings: Settings, output_path: str) -> Path:
+    relative_output = Path(output_path.strip())
+    if not output_path.strip() or relative_output.is_absolute() or relative_output.drive:
+        raise ValueError("Output path must be a file name or relative path under the export directory.")
+    if ".." in relative_output.parts:
+        raise ValueError("Output path must not contain '..'.")
+
+    export_dir = settings.export_dir.resolve()
+    resolved_output = (export_dir / relative_output).resolve()
+    try:
+        resolved_output.relative_to(export_dir)
+    except ValueError as exc:
+        raise ValueError("Output path must stay under the export directory.") from exc
+    return resolved_output
+
+
 def create_ui_router(settings: Settings, get_session: Callable):
     router = APIRouter()
 
@@ -226,7 +242,8 @@ def create_ui_router(settings: Settings, get_session: Callable):
     ):
         transactions = db.exec(select(Transaction).where(Transaction.currency == currency)).all()
         try:
-            export_result = export_transactions_to_template(Path(template_path), Path(output_path), transactions)
+            resolved_output_path = _resolve_export_output_path(settings, output_path)
+            export_result = export_transactions_to_template(Path(template_path), resolved_output_path, transactions)
             result = f"导出 {export_result.row_count} 行到 {export_result.output_path}，跳过 {len(export_result.skipped_ids)} 条"
         except Exception as exc:
             return templates.TemplateResponse(
