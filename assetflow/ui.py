@@ -29,6 +29,28 @@ _resolve_export_output_path = resolve_export_output_path
 def create_ui_router(settings: Settings, get_session: Callable):
     router = APIRouter()
 
+    def render_review_response(request: Request, db: Session, status: str | None = None, error: str | None = None):
+        query = select(CandidateTransaction)
+        if status:
+            statuses = [status]
+            query = query.where(CandidateTransaction.review_status == status)
+        else:
+            statuses = ["pending", "needs_review"]
+            query = query.where(CandidateTransaction.review_status.in_(statuses))
+        candidates = db.exec(query.order_by(CandidateTransaction.created_at.desc())).all()
+        return templates.TemplateResponse(
+            request,
+            "review.html",
+            {
+                "settings": settings,
+                "active": "review",
+                "candidates": candidates,
+                "status": status,
+                "statuses": statuses,
+                "error": error,
+            },
+        )
+
     @router.get("/ui")
     def dashboard_page(request: Request, db: Session = Depends(get_session)):
         return templates.TemplateResponse(
@@ -100,34 +122,16 @@ def create_ui_router(settings: Settings, get_session: Callable):
 
     @router.get("/ui/review")
     def review_page(request: Request, status: str | None = None, db: Session = Depends(get_session)):
-        query = select(CandidateTransaction)
-        if status:
-            statuses = [status]
-            query = query.where(CandidateTransaction.review_status == status)
-        else:
-            statuses = ["pending", "needs_review"]
-            query = query.where(CandidateTransaction.review_status.in_(statuses))
-        candidates = db.exec(query.order_by(CandidateTransaction.created_at.desc())).all()
-        return templates.TemplateResponse(
-            request,
-            "review.html",
-            {
-                "settings": settings,
-                "active": "review",
-                "candidates": candidates,
-                "status": status,
-                "statuses": statuses,
-            },
-        )
+        return render_review_response(request, db, status=status)
 
     @router.post("/ui/review/{candidate_id}/confirm")
-    def confirm_candidate_form(candidate_id: int, db: Session = Depends(get_session)):
+    def confirm_candidate_form(candidate_id: int, request: Request, db: Session = Depends(get_session)):
         candidate = db.get(CandidateTransaction, candidate_id)
         if candidate is not None and candidate.review_status in ACTIONABLE_REVIEW_STATUSES:
             try:
                 confirm_candidate(db, candidate_id)
-            except ValueError:
-                pass
+            except ValueError as exc:
+                return render_review_response(request, db, error=f"确认失败：{exc}")
         return RedirectResponse("/ui/review", status_code=303)
 
     @router.post("/ui/review/{candidate_id}/ignore")

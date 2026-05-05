@@ -217,6 +217,37 @@ def test_ui_confirm_form_is_safe_for_already_confirmed_candidate(settings, sessi
     assert len(session.exec(select(Transaction)).all()) == 1
 
 
+def test_ui_confirm_form_renders_error_for_incomplete_candidate(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+    candidate = CandidateTransaction(
+        upload_id=1,
+        ocr_result_id=1,
+        broker="htsc_global",
+        market="HK",
+        symbol="00700",
+        security_name="Tencent",
+        trade_type="buy",
+        trade_date=date(2026, 5, 4),
+        quantity=Decimal("100"),
+        price=Decimal("400"),
+        currency="HKD",
+        dedupe_key="ui-incomplete-candidate",
+        confidence=0.75,
+        review_status="needs_review",
+    )
+    session.add(candidate)
+    session.commit()
+    session.refresh(candidate)
+
+    response = client.post(f"/ui/review/{candidate.id}/confirm")
+
+    assert response.status_code == 200
+    assert "确认失败" in response.text
+    session.refresh(candidate)
+    assert candidate.review_status == "needs_review"
+    assert session.exec(select(Transaction)).all() == []
+
+
 def test_ui_ignore_form_does_not_mutate_confirmed_candidate(settings, session) -> None:
     client = TestClient(create_app(settings=settings, session=session))
     client.post(

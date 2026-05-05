@@ -6,6 +6,7 @@
   <label>状态 <input name="status" value="{{ status or '' }}" placeholder="pending"></label>
   <button type="submit">筛选</button>
 </form>
+{% if error %}<section class="panel error"><h2>确认失败</h2><p>{{ error }}</p></section>{% endif %}
 <div class="table-wrap">
   <table>
     <thead><tr><th>ID</th><th>状态</th><th>日期</th><th>时间</th><th>代码</th><th>名称</th><th>类型</th><th>数量</th><th>价格</th><th>净额</th><th>操作</th></tr></thead>
