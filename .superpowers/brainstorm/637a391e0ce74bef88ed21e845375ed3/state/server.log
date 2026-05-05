@@ -1,0 +1,19 @@
+{"type":"server-started","port":54971,"host":"127.0.0.1","url_host":"localhost","url":"http://localhost:54971","screen_dir":"D:\\projects\\AssetFlow\\.superpowers\\brainstorm\\637a391e0ce74bef88ed21e845375ed3\\content","state_dir":"D:\\projects\\AssetFlow\\.superpowers\\brainstorm\\637a391e0ce74bef88ed21e845375ed3\\state"}
+{"type":"screen-added","file":"D:\\projects\\AssetFlow\\.superpowers\\brainstorm\\637a391e0ce74bef88ed21e845375ed3\\content\\dashboard-layout-options.html"}
+{"source":"user-event","type":"click","text":"A. 总览优先\n        \n          AssetFlow | 总览 | 持仓 | 交易 | 审核 | 导出\n          \n            总资产\n            现金\n            持仓市值\n            待审核\n          \n          \n            持仓排行 / 盈亏概览\n            最近上传与待确认\n          \n        \n      \n    \n    \n      总览优先\n      首页像资产控制台，适合每天看资产、持仓、待办，再进入明细。","choice":"overview-first","id":null,"timestamp":1777891041860}
+{"source":"user-event","type":"click","text":"B. 工作流优先\n        \n          AssetFlow | 上传 | 审核 | 入账 | 导出\n          \n            1 上传截图\n            2 确认候选\n            3 导出 XLSX\n          \n          待处理候选交易表格\n        \n      \n    \n    \n      工作流优先\n      首页直接解决“截图进来以后我该做什么”，适合先把审核和导出跑顺。","choice":"workflow-first","id":null,"timestamp":1777891051795}
+{"source":"user-event","type":"click","text":"A. 总览优先\n        \n          AssetFlow | 总览 | 持仓 | 交易 | 审核 | 导出\n          \n            总资产\n            现金\n            持仓市值\n            待审核\n          \n          \n            持仓排行 / 盈亏概览\n            最近上传与待确认\n          \n        \n      \n    \n    \n      总览优先\n      首页像资产控制台，适合每天看资产、持仓、待办，再进入明细。","choice":"overview-first","id":null,"timestamp":1777891065880}
+{"type":"screen-added","file":"D:\\projects\\AssetFlow\\.superpowers\\brainstorm\\637a391e0ce74bef88ed21e845375ed3\\content\\overview-wireframe.html"}
+{"source":"user-event","type":"click","text":"↻\n    \n      需要调整\n      比如把审核放更显眼、去掉资产卡片、或增加上传历史。","choice":"revise-overview-wireframe","id":null,"timestamp":1777892336911}
+{"source":"user-event","type":"click","text":"✓\n    \n      这个首页结构可以\n      后续设计审核、交易、持仓、导出页面。","choice":"approve-overview-wireframe","id":null,"timestamp":1777892339724}
+{"source":"user-event","type":"click","text":"↻\n    \n      需要调整\n      比如把审核放更显眼、去掉资产卡片、或增加上传历史。","choice":"revise-overview-wireframe","id":null,"timestamp":1777892353389}
+{"source":"user-event","type":"click","text":"✓\n    \n      这个首页结构可以\n      后续设计审核、交易、持仓、导出页面。","choice":"approve-overview-wireframe","id":null,"timestamp":1777892354544}
+{"source":"user-event","type":"click","text":"↻\n    \n      需要调整\n      比如把审核放更显眼、去掉资产卡片、或增加上传历史。","choice":"revise-overview-wireframe","id":null,"timestamp":1777892355466}
+{"source":"user-event","type":"click","text":"✓\n    \n      这个首页结构可以\n      后续设计审核、交易、持仓、导出页面。","choice":"approve-overview-wireframe","id":null,"timestamp":1777892356283}
+{"source":"user-event","type":"click","text":"↻\n    \n      需要调整\n      比如把审核放更显眼、去掉资产卡片、或增加上传历史。","choice":"revise-overview-wireframe","id":null,"timestamp":1777892369784}
+{"source":"user-event","type":"click","text":"✓\n    \n      这个首页结构可以\n      后续设计审核、交易、持仓、导出页面。","choice":"approve-overview-wireframe","id":null,"timestamp":1777892377351}
+{"type":"screen-added","file":"D:\\projects\\AssetFlow\\.superpowers\\brainstorm\\637a391e0ce74bef88ed21e845375ed3\\content\\waiting-after-overview.html"}
+{"type":"screen-updated","file":"D:\\projects\\AssetFlow\\.superpowers\\brainstorm\\637a391e0ce74bef88ed21e845375ed3\\content\\waiting-after-overview.html"}
+{"type":"screen-updated","file":"D:\\projects\\AssetFlow\\.superpowers\\brainstorm\\637a391e0ce74bef88ed21e845375ed3\\content\\waiting-after-overview.html"}
+{"type":"screen-updated","file":"D:\\projects\\AssetFlow\\.superpowers\\brainstorm\\637a391e0ce74bef88ed21e845375ed3\\content\\waiting-after-overview.html"}
+{"type":"server-stopped","reason":"idle timeout"}

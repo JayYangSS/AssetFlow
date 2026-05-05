@@ -35,3 +35,28 @@ Form fields: broker=htsc_global, file=<screenshot>
 ```
 
 iPhone setup is documented in `docs/ios-shortcut.md`.
+
+## Local OCR
+
+AssetFlow supports a local PaddleOCR provider for first-pass offline OCR. PaddlePaddle may not provide Windows wheels for the newest Python versions. On Windows, use Python 3.13 or 3.12 instead of Python 3.14:
+
+```powershell
+conda create -n assetflow-ocr python=3.13
+conda activate assetflow-ocr
+python -m pip install --upgrade pip
+pip install -e ".[dev,ocr]"
+```
+
+If your current Python environment can install PaddlePaddle, this is enough:
+
+```powershell
+pip install -e ".[dev,ocr]"
+```
+
+Then set `.env`:
+
+```dotenv
+ASSETFLOW_RECOGNITION_PROVIDER=paddleocr
+```
+
+Restart Uvicorn after changing `.env`. This first version defaults to PP-OCRv4 mobile on CPU with MKL-DNN disabled for better Windows compatibility, supports both PaddleOCR 3.x `predict()` results and 2.x `ocr()` results, then parses common 华泰涨乐全球通成交记录 text into transactions. Positions and cash screenshots are classified but still need follow-up parser work.

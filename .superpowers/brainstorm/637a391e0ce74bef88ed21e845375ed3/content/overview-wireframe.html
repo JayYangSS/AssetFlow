@@ -1,0 +1,61 @@
+<h2>AssetFlow 总览优先界面线框</h2>
+<p class="subtitle">第一版目标：不用打开数据库，也能完成查看、上传、审核、导出这些日常动作。</p>
+
+<div class="mockup">
+  <div class="mockup-header">首页 /ui</div>
+  <div class="mockup-body">
+    <div class="mock-nav">AssetFlow　总览　上传　审核　交易流水　持仓　导出</div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0">
+      <div class="placeholder">总资产<br><strong>按最新现金+持仓截图</strong></div>
+      <div class="placeholder">现金<br><strong>HKD / USD / CNY</strong></div>
+      <div class="placeholder">持仓市值<br><strong>按最新持仓快照</strong></div>
+      <div class="placeholder">待审核<br><strong>候选交易数量</strong></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1.25fr .9fr;gap:12px">
+      <div>
+        <div class="label">持仓摘要</div>
+        <div class="placeholder" style="height:155px">股票代码｜名称｜数量｜市值｜盈亏｜最新截图时间</div>
+      </div>
+      <div>
+        <div class="label">待处理</div>
+        <div class="placeholder" style="height:70px">待审核候选：确认 / 编辑 / 忽略</div>
+        <div class="placeholder" style="height:70px;margin-top:10px">最近上传：截图类型 / OCR 状态</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+      <div>
+        <div class="label">最近交易</div>
+        <div class="placeholder" style="height:110px">正式入账交易流水</div>
+      </div>
+      <div>
+        <div class="label">快捷操作</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="mock-button">上传截图</button>
+          <button class="mock-button">处理审核</button>
+          <button class="mock-button">导出 XLSX</button>
+          <button class="mock-button">运行对账</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="approve-overview-wireframe" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content">
+      <h3>这个首页结构可以</h3>
+      <p>后续设计审核、交易、持仓、导出页面。</p>
+    </div>
+  </div>
+  <div class="option" data-choice="revise-overview-wireframe" onclick="toggleSelect(this)">
+    <div class="letter">↻</div>
+    <div class="content">
+      <h3>需要调整</h3>
+      <p>比如把审核放更显眼、去掉资产卡片、或增加上传历史。</p>
+    </div>
+  </div>
+</div>

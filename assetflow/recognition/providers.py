@@ -6,6 +6,7 @@ from typing import Protocol
 from openai import OpenAI
 
 from assetflow.config import Settings
+from assetflow.recognition.paddleocr_provider import PaddleOCRVisionProvider
 from assetflow.recognition.schemas import RecognizedScreenshot
 
 
@@ -71,4 +72,6 @@ def make_provider(settings: Settings) -> VisionProvider:
         return FixtureVisionProvider(Path("tests/fixtures/recognition/trade_history.json"))
     if settings.assetflow_recognition_provider == "openai":
         return OpenAIVisionProvider(settings)
+    if settings.assetflow_recognition_provider == "paddleocr":
+        return PaddleOCRVisionProvider()
     raise ValueError(f"Unsupported recognition provider: {settings.assetflow_recognition_provider}")

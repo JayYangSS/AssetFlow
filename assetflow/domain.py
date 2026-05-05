@@ -19,6 +19,15 @@ def calculate_hash(data: bytes) -> str:
     return sha256(data).hexdigest()
 
 
+def _format_dedupe_decimal(value: Decimal | None) -> str:
+    if value is None:
+        return ""
+    normalized = value.normalize()
+    if normalized == 0:
+        return "0"
+    return format(normalized, "f")
+
+
 def build_dedupe_key(
     *,
     broker: str,
@@ -39,9 +48,9 @@ def build_dedupe_key(
         trade_time.isoformat() if trade_time else "",
         symbol or "",
         trade_type or "",
-        str(quantity) if quantity is not None else "",
-        str(price) if price is not None else "",
-        str(net_amount) if net_amount is not None else "",
+        _format_dedupe_decimal(quantity),
+        _format_dedupe_decimal(price),
+        _format_dedupe_decimal(net_amount),
         currency or "",
     ]
     return sha256("|".join(parts).encode("utf-8")).hexdigest()

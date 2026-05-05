@@ -39,6 +39,31 @@ def candidate_can_auto_confirm(candidate: CandidateTransaction, min_confidence: 
     return True
 
 
+def _optional_match(column, value):
+    return column.is_(None) if value is None else column == value
+
+
+def candidate_has_duplicate_identity(candidate: CandidateTransaction) -> bool:
+    return candidate.symbol is not None and candidate.trade_date is not None and candidate.trade_time is not None
+
+
+def find_existing_transaction(session: Session, candidate: CandidateTransaction) -> Transaction | None:
+    existing = session.exec(select(Transaction).where(Transaction.dedupe_key == candidate.dedupe_key)).first()
+    if existing is not None:
+        return existing
+    if not candidate_has_duplicate_identity(candidate):
+        return None
+    return session.exec(
+        select(Transaction).where(
+            Transaction.broker == candidate.broker,
+            _optional_match(Transaction.account_alias, candidate.account_alias),
+            Transaction.trade_date == candidate.trade_date,
+            _optional_match(Transaction.trade_time, candidate.trade_time),
+            Transaction.symbol == candidate.symbol,
+        )
+    ).first()
+
+
 def confirm_candidate(session: Session, candidate_id: int) -> Transaction:
     candidate = session.get(CandidateTransaction, candidate_id)
     if candidate is None:
@@ -49,7 +74,7 @@ def confirm_candidate(session: Session, candidate_id: int) -> Transaction:
             return existing_confirmed
     if candidate.review_status not in ACTIONABLE_REVIEW_STATUSES:
         raise ValueError(f"Candidate status is not actionable: {candidate.review_status}")
-    existing = session.exec(select(Transaction).where(Transaction.dedupe_key == candidate.dedupe_key)).first()
+    existing = find_existing_transaction(session, candidate)
     if existing is not None:
         candidate.review_status = "duplicate"
         candidate.confirmed_transaction_id = existing.id

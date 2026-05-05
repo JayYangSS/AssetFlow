@@ -1,9 +1,55 @@
-from sqlmodel import Session
+from datetime import date, time
+
+from sqlmodel import Session, select
 
 from assetflow.domain import build_dedupe_key
-from assetflow.models import CandidateTransaction, CashSnapshot, OcrResult, PositionSnapshot, Upload
+from assetflow.models import CandidateTransaction, CashSnapshot, OcrResult, PositionSnapshot, Transaction, Upload
 from assetflow.recognition.providers import VisionProvider
-from assetflow.recognition.schemas import RecognizedScreenshot
+from assetflow.recognition.schemas import RecognizedScreenshot, RecognizedTransaction
+
+
+CandidateIdentity = tuple[str, str | None, str, date, time]
+
+
+def _candidate_identity(item: RecognizedTransaction) -> CandidateIdentity | None:
+    if item.symbol is None or item.trade_date is None or item.trade_time is None:
+        return None
+    return (item.broker, item.account_alias, item.symbol, item.trade_date, item.trade_time)
+
+
+def _candidate_identity_exists(session: Session, identity: CandidateIdentity) -> bool:
+    broker, account_alias, symbol, trade_date, trade_time = identity
+    account_filter = (
+        CandidateTransaction.account_alias.is_(None)
+        if account_alias is None
+        else CandidateTransaction.account_alias == account_alias
+    )
+    existing_candidate = session.exec(
+        select(CandidateTransaction).where(
+            CandidateTransaction.broker == broker,
+            account_filter,
+            CandidateTransaction.symbol == symbol,
+            CandidateTransaction.trade_date == trade_date,
+            CandidateTransaction.trade_time == trade_time,
+        )
+    ).first()
+    if existing_candidate is not None:
+        return True
+    transaction_account_filter = (
+        Transaction.account_alias.is_(None) if account_alias is None else Transaction.account_alias == account_alias
+    )
+    return (
+        session.exec(
+            select(Transaction).where(
+                Transaction.broker == broker,
+                transaction_account_filter,
+                Transaction.symbol == symbol,
+                Transaction.trade_date == trade_date,
+                Transaction.trade_time == trade_time,
+            )
+        ).first()
+        is not None
+    )
 
 
 def process_recognition_result(
@@ -26,7 +72,13 @@ def process_recognition_result(
     session.commit()
     session.refresh(ocr)
 
+    seen_identities: set[CandidateIdentity] = set()
     for item in result.transactions:
+        identity = _candidate_identity(item)
+        if identity is not None:
+            if identity in seen_identities or _candidate_identity_exists(session, identity):
+                continue
+            seen_identities.add(identity)
         candidate = CandidateTransaction(
             upload_id=upload.id,
             ocr_result_id=ocr.id,

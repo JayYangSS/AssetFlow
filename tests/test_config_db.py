@@ -167,6 +167,23 @@ def test_create_db_and_tables_relaxes_manual_transaction_source_columns(tmp_path
     assert saved == [(1, "legacy-key")]
 
 
+def test_sqlite_engine_uses_wal_and_busy_timeout(tmp_path: Path) -> None:
+    settings = Settings(
+        assetflow_data_dir=tmp_path / "data",
+        assetflow_upload_token="secret-token",
+        assetflow_recognition_provider="fixture",
+    )
+    settings.ensure_directories()
+    engine = make_engine(settings.database_url)
+
+    with engine.connect() as connection:
+        journal_mode = connection.exec_driver_sql("PRAGMA journal_mode").scalar()
+        busy_timeout = connection.exec_driver_sql("PRAGMA busy_timeout").scalar()
+
+    assert journal_mode == "wal"
+    assert busy_timeout >= 30000
+
+
 def test_create_db_and_tables_preserves_existing_legacy_named_table(tmp_path: Path) -> None:
     settings = Settings(
         assetflow_data_dir=tmp_path / "data",

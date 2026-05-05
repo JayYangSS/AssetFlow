@@ -1,0 +1,70 @@
+<h2>AssetFlow 完整资产看板：第一版方向</h2>
+<p class="subtitle">先选“每天打开后最想看到什么”。这一步只定信息架构，不定最终视觉风格。</p>
+
+<div class="cards">
+  <div class="card" data-choice="overview-first" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A. 总览优先</div>
+        <div class="mockup-body">
+          <div class="mock-nav">AssetFlow | 总览 | 持仓 | 交易 | 审核 | 导出</div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0">
+            <div class="placeholder">总资产</div>
+            <div class="placeholder">现金</div>
+            <div class="placeholder">持仓市值</div>
+            <div class="placeholder">待审核</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:10px">
+            <div class="placeholder" style="height:120px">持仓排行 / 盈亏概览</div>
+            <div class="placeholder" style="height:120px">最近上传与待确认</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>总览优先</h3>
+      <p>首页像资产控制台，适合每天看资产、持仓、待办，再进入明细。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="workflow-first" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B. 工作流优先</div>
+        <div class="mockup-body">
+          <div class="mock-nav">AssetFlow | 上传 | 审核 | 入账 | 导出</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:10px 0">
+            <div class="placeholder">1 上传截图</div>
+            <div class="placeholder">2 确认候选</div>
+            <div class="placeholder">3 导出 XLSX</div>
+          </div>
+          <div class="placeholder" style="height:135px">待处理候选交易表格</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>工作流优先</h3>
+      <p>首页直接解决“截图进来以后我该做什么”，适合先把审核和导出跑顺。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="ledger-first" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C. 台账优先</div>
+        <div class="mockup-body">
+          <div class="mock-nav">AssetFlow | 交易流水 | 候选 | 持仓 | 导出</div>
+          <div class="placeholder" style="height:150px">交易流水主表：筛选、搜索、状态、来源截图</div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="mock-button">确认候选</button>
+            <button class="mock-button">导出 XLSX</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>台账优先</h3>
+      <p>首页就是交易记录和候选记录，最像数据库的友好前端，查错和清理最直接。</p>
+    </div>
+  </div>
+</div>
