@@ -1,6 +1,6 @@
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from typing import Callable
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
@@ -26,8 +26,15 @@ ACTIONABLE_REVIEW_STATUSES = {"pending", "needs_review"}
 
 
 def _resolve_export_output_path(settings: Settings, output_path: str) -> Path:
-    relative_output = Path(output_path.strip())
-    if not output_path.strip() or relative_output.is_absolute() or relative_output.drive:
+    stripped_output_path = output_path.strip()
+    windows_output = PureWindowsPath(stripped_output_path)
+    if not stripped_output_path or windows_output.is_absolute() or windows_output.drive:
+        raise ValueError("Output path must be a file name or relative path under the export directory.")
+    if ".." in windows_output.parts:
+        raise ValueError("Output path must not contain '..'.")
+
+    relative_output = Path(stripped_output_path)
+    if relative_output.is_absolute() or relative_output.drive:
         raise ValueError("Output path must be a file name or relative path under the export directory.")
     if ".." in relative_output.parts:
         raise ValueError("Output path must not contain '..'.")

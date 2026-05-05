@@ -1,11 +1,13 @@
 from datetime import date
 from decimal import Decimal
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
+import pytest
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
 from sqlmodel import select
 
+import assetflow.ui as ui_module
 from assetflow.api import create_app
 from assetflow.exporters.xlsx_template import EXPECTED_HEADERS
 from assetflow.models import CandidateTransaction, Transaction, Upload
@@ -17,6 +19,34 @@ def _make_export_template(path: Path) -> Path:
     ws.append(EXPECTED_HEADERS)
     wb.save(path)
     return path
+
+
+class _PosixOnlyPath:
+    def __init__(self, *parts: object) -> None:
+        self._path = PurePosixPath(*(str(part) for part in parts))
+
+    @property
+    def drive(self) -> str:
+        return self._path.drive
+
+    @property
+    def parts(self) -> tuple[str, ...]:
+        return self._path.parts
+
+    def is_absolute(self) -> bool:
+        return self._path.is_absolute()
+
+    def resolve(self) -> "_PosixOnlyPath":
+        return self
+
+    def relative_to(self, other: object) -> "_PosixOnlyPath":
+        return _PosixOnlyPath(self._path.relative_to(str(other)))
+
+    def __truediv__(self, other: object) -> "_PosixOnlyPath":
+        return _PosixOnlyPath(self._path, other)
+
+    def __str__(self) -> str:
+        return str(self._path)
 
 
 def test_ui_dashboard_page_returns_html(settings, session) -> None:
@@ -268,6 +298,24 @@ def test_ui_export_form_rejects_unsafe_output_paths(settings, session, tmp_path)
         assert response.status_code == 200
         assert "导出失败" in response.text
         assert not outside_output.exists()
+
+
+def test_resolve_export_output_path_rejects_windows_style_paths_on_posix(monkeypatch) -> None:
+    monkeypatch.setattr(ui_module, "Path", _PosixOnlyPath)
+
+    class SettingsStub:
+        export_dir = _PosixOnlyPath("/exports")
+
+    unsafe_outputs = [
+        r"C:\temp\outside.xlsx",
+        r"C:outside.xlsx",
+        r"\\server\share\outside.xlsx",
+        r"..\outside.xlsx",
+    ]
+
+    for output_path in unsafe_outputs:
+        with pytest.raises(ValueError):
+            ui_module._resolve_export_output_path(SettingsStub(), output_path)
 
 
 def test_ui_export_form_writes_relative_output_under_export_dir(settings, session, tmp_path) -> None:
