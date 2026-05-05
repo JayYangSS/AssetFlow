@@ -201,6 +201,64 @@ def test_parse_htsc_compact_filled_order_list_ignores_invalid_month_day() -> Non
     assert result.transactions[0].symbol == "00700"
 
 
+def test_parse_htsc_positions_watchlist_screenshot() -> None:
+    result = parse_htsc_global_ocr_lines(
+        [
+            "自选",
+            "持仓",
+            "订单",
+            "港股",
+            "393,680.00 HKD",
+            "名称代码",
+            "市值|数量",
+            "今日盈亏",
+            "腾讯控股",
+            "HK 00700 M",
+            "47,220.00",
+            "100",
+            "-80.00",
+            "-0.16%",
+            "天星医疗",
+            "HK",
+            "01609",
+            "0.00",
+            "0.00",
+            "16,239.68",
+            "--",
+            "理想汽车-W",
+            "HK",
+            "02015",
+            "13,930.00",
+            "200",
+            "-100.00",
+            "-0.71%",
+            "美团-W",
+            "HK",
+            "03690",
+            "M",
+            "33,420.00",
+            "400",
+            "-360.00",
+            "-1.06%",
+        ],
+        broker="htsc_global",
+    )
+
+    assert result.screenshot_type == "positions"
+    assert result.confidence == 0.75
+    assert len(result.positions) == 4
+    assert result.positions[0].security_name == "腾讯控股"
+    assert result.positions[0].market == "HK"
+    assert result.positions[0].symbol == "00700"
+    assert result.positions[0].market_value == Decimal("47220.00")
+    assert result.positions[0].quantity == Decimal("100")
+    assert result.positions[0].currency == "HKD"
+    assert result.positions[0].unrealized_pnl == Decimal("-80.00")
+    assert result.positions[2].security_name == "理想汽车-W"
+    assert result.positions[2].symbol == "02015"
+    assert result.positions[2].quantity == Decimal("200")
+
+
 def test_make_provider_creates_paddleocr_provider() -> None:
     settings = Settings(
         assetflow_upload_token="secret-token",

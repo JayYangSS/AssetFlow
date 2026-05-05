@@ -1,10 +1,10 @@
 import re
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
-from assetflow.recognition.schemas import RecognizedScreenshot, RecognizedTransaction
+from assetflow.recognition.schemas import RecognizedPosition, RecognizedScreenshot, RecognizedTransaction
 
 
 FIELD_ALIASES = {
@@ -206,6 +206,56 @@ def _looks_like_compact_number(value: str) -> bool:
     return bool(re.fullmatch(r"-?\d+(?:\.\d+)?", value.strip().replace(",", "")))
 
 
+def _is_percentage(value: str) -> bool:
+    return "%" in value
+
+
+def _looks_like_position_name(value: str) -> bool:
+    normalized = value.strip()
+    if not normalized:
+        return False
+    if normalized in {
+        "自选",
+        "持仓",
+        "订单",
+        "港股",
+        "美股",
+        "沪深",
+        "新加坡",
+        "名称代码",
+        "市值|数量",
+        "今日盈亏",
+        "M",
+    }:
+        return False
+    if _parse_market(normalized) is not None or _looks_like_symbol(normalized):
+        return False
+    if _parse_decimal(normalized) is not None and _looks_like_compact_number(normalized):
+        return False
+    if _is_percentage(normalized) or normalized == "--":
+        return False
+    return bool(re.search(r"[\u4e00-\u9fffA-Za-z]", normalized))
+
+
+def _extract_position_market_symbol(lines: list[str], start_index: int) -> tuple[str | None, str | None, int]:
+    first_line = lines[start_index].strip() if start_index < len(lines) else ""
+    match = re.search(r"\b(HK|US|SH|SZ)\s*(\d{4,6})\b", first_line.upper())
+    if match:
+        market, symbol = match.groups()
+        return market, symbol, start_index + 1
+
+    market = _parse_market(first_line)
+    symbol_index = start_index + 1
+    symbol = lines[symbol_index].strip() if symbol_index < len(lines) and _looks_like_symbol(lines[symbol_index]) else None
+    if market is None or symbol is None:
+        return None, None, start_index
+
+    cursor = symbol_index + 1
+    while cursor < len(lines) and lines[cursor].strip() in {"M"}:
+        cursor += 1
+    return market, symbol, cursor
+
+
 def _parse_compact_row(
     trade_date: date,
     inline_security_name: str,
@@ -262,9 +312,13 @@ def _parse_compact_row(
 
 def _guess_screenshot_type(lines: list[str]) -> str:
     joined = " ".join(lines)
-    if any(keyword in joined for keyword in ("已成交", "买卖方向", "数量|价格", "名称代码")):
-        return "trade_history"
     if any(keyword in joined for keyword in ("成交记录", "成交日期", "交易类别", "成交价格")):
+        return "trade_history"
+    if any(keyword in joined for keyword in ("市值|数量", "今日盈亏", "可用数量")):
+        return "positions"
+    if "持仓" in joined and "名称代码" in joined and "买卖方向" not in joined:
+        return "positions"
+    if any(keyword in joined for keyword in ("已成交", "买卖方向", "数量|价格", "名称代码")):
         return "trade_history"
     if any(keyword in joined for keyword in ("持仓", "证券余额", "可用数量", "市值")):
         return "positions"
@@ -289,8 +343,66 @@ def _parse_compact_filled_order_rows(lines: list[str], broker: str) -> list[Reco
     return transactions
 
 
+def _parse_position_rows(lines: list[str], broker: str) -> list[RecognizedPosition]:
+    positions: list[RecognizedPosition] = []
+    index = 0
+    snapshot_at = datetime.now(UTC)
+    while index < len(lines):
+        security_name = lines[index].strip()
+        if not _looks_like_position_name(security_name):
+            index += 1
+            continue
+        if index + 1 >= len(lines):
+            break
+        market, symbol, cursor = _extract_position_market_symbol(lines, index + 1)
+        if market is None or symbol is None:
+            index += 1
+            continue
+
+        values: list[Decimal] = []
+        while cursor < len(lines):
+            line = lines[cursor].strip()
+            if _looks_like_position_name(line):
+                break
+            if _is_percentage(line):
+                cursor += 1
+                break
+            if line != "--":
+                value = _parse_decimal(line)
+                if value is not None and _looks_like_compact_number(line):
+                    values.append(value)
+            cursor += 1
+
+        if len(values) >= 2:
+            positions.append(
+                RecognizedPosition(
+                    broker=broker,
+                    market=market,
+                    symbol=symbol,
+                    security_name=security_name,
+                    market_value=values[0],
+                    quantity=values[1],
+                    unrealized_pnl=values[2] if len(values) >= 3 else None,
+                    currency=MARKET_CURRENCIES[market],
+                    snapshot_at=snapshot_at,
+                    confidence=0.75,
+                )
+            )
+            index = cursor
+            continue
+        index += 1
+    return positions
+
+
 def parse_htsc_global_ocr_lines(lines: list[str], broker: str) -> RecognizedScreenshot:
     screenshot_type = _guess_screenshot_type(lines)
+    if screenshot_type == "positions":
+        positions = _parse_position_rows(lines, broker)
+        return RecognizedScreenshot(
+            screenshot_type="positions",
+            confidence=0.75 if positions else 0.40,
+            positions=positions,
+        )
     if screenshot_type != "trade_history":
         return RecognizedScreenshot(
             screenshot_type=screenshot_type,
