@@ -1,9 +1,9 @@
-from datetime import date
-from decimal import Decimal
+from datetime import date, time
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Callable
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -13,6 +13,7 @@ from sqlmodel import select
 from assetflow.cash_movements import create_cash_movement
 from assetflow.config import Settings
 from assetflow.dashboard import dashboard_summary, latest_cash, latest_positions, list_transactions, recent_uploads
+from assetflow.domain import SUPPORTED_CURRENCIES, TEMPLATE_TRADE_TYPES, build_dedupe_key
 from assetflow.exporters.xlsx_template import export_transactions_to_template
 from assetflow.export_paths import resolve_export_output_path
 from assetflow.ledger import ACTIONABLE_REVIEW_STATUSES, confirm_candidate, ignore_candidate
@@ -24,6 +25,46 @@ from assetflow.uploads import InvalidUploadError
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 _resolve_export_output_path = resolve_export_output_path
+
+
+def _clean_optional_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    return text or None
+
+
+def _parse_optional_decimal(value: str | None, label: str) -> Decimal | None:
+    text = _clean_optional_text(value)
+    if text is None:
+        return None
+    try:
+        parsed = Decimal(text)
+    except InvalidOperation as exc:
+        raise ValueError(f"{label}格式不正确") from exc
+    if not parsed.is_finite():
+        raise ValueError(f"{label}格式不正确")
+    return parsed
+
+
+def _parse_optional_date(value: str | None, label: str) -> date | None:
+    text = _clean_optional_text(value)
+    if text is None:
+        return None
+    try:
+        return date.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(f"{label}格式不正确，应为 YYYY-MM-DD") from exc
+
+
+def _parse_optional_time(value: str | None, label: str) -> time | None:
+    text = _clean_optional_text(value)
+    if text is None:
+        return None
+    try:
+        return time.fromisoformat(text)
+    except ValueError as exc:
+        raise ValueError(f"{label}格式不正确，应为 HH:MM 或 HH:MM:SS") from exc
 
 
 def create_ui_router(settings: Settings, get_session: Callable):
@@ -48,6 +89,24 @@ def create_ui_router(settings: Settings, get_session: Callable):
                 "status": status,
                 "statuses": statuses,
                 "error": error,
+            },
+        )
+
+    def render_candidate_edit_response(
+        request: Request,
+        candidate: CandidateTransaction,
+        error: str | None = None,
+    ):
+        return templates.TemplateResponse(
+            request,
+            "edit_candidate.html",
+            {
+                "settings": settings,
+                "active": "review",
+                "candidate": candidate,
+                "error": error,
+                "trade_types": TEMPLATE_TRADE_TYPES,
+                "currencies": sorted(SUPPORTED_CURRENCIES),
             },
         )
 
@@ -132,6 +191,89 @@ def create_ui_router(settings: Settings, get_session: Callable):
                 confirm_candidate(db, candidate_id)
             except ValueError as exc:
                 return render_review_response(request, db, error=f"确认失败：{exc}")
+        return RedirectResponse("/ui/review", status_code=303)
+
+    @router.get("/ui/review/{candidate_id}/edit")
+    def edit_candidate_page(candidate_id: int, request: Request, db: Session = Depends(get_session)):
+        candidate = db.get(CandidateTransaction, candidate_id)
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        return render_candidate_edit_response(request, candidate)
+
+    @router.post("/ui/review/{candidate_id}/edit")
+    def edit_candidate_form(
+        candidate_id: int,
+        request: Request,
+        db: Session = Depends(get_session),
+        market: str | None = Form(None),
+        symbol: str | None = Form(None),
+        security_name: str | None = Form(None),
+        trade_type: str | None = Form(None),
+        trade_date: str | None = Form(None),
+        trade_time: str | None = Form(None),
+        quantity: str | None = Form(None),
+        price: str | None = Form(None),
+        gross_amount: str | None = Form(None),
+        net_amount: str | None = Form(None),
+        commission: str | None = Form(None),
+        fees: str | None = Form(None),
+        currency: str | None = Form(None),
+        position_balance_after: str | None = Form(None),
+    ):
+        candidate = db.get(CandidateTransaction, candidate_id)
+        if candidate is None:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        if candidate.review_status not in ACTIONABLE_REVIEW_STATUSES:
+            return render_candidate_edit_response(request, candidate, error=f"当前状态不能编辑：{candidate.review_status}")
+
+        try:
+            parsed_market = (_clean_optional_text(market) or "").upper() or None
+            parsed_symbol = _clean_optional_text(symbol)
+            parsed_security_name = _clean_optional_text(security_name)
+            parsed_trade_type = (_clean_optional_text(trade_type) or "").lower() or None
+            parsed_trade_date = _parse_optional_date(trade_date, "交易日期")
+            parsed_trade_time = _parse_optional_time(trade_time, "交易时间")
+            parsed_quantity = _parse_optional_decimal(quantity, "数量")
+            parsed_price = _parse_optional_decimal(price, "价格")
+            parsed_gross_amount = _parse_optional_decimal(gross_amount, "成交金额")
+            parsed_net_amount = _parse_optional_decimal(net_amount, "净额")
+            parsed_commission = _parse_optional_decimal(commission, "佣金")
+            parsed_fees = _parse_optional_decimal(fees, "费用")
+            parsed_currency = (_clean_optional_text(currency) or "").upper() or None
+            parsed_position_balance_after = _parse_optional_decimal(position_balance_after, "成交后持仓")
+        except ValueError as exc:
+            return render_candidate_edit_response(request, candidate, error=str(exc))
+
+        candidate.market = parsed_market
+        candidate.symbol = parsed_symbol
+        candidate.security_name = parsed_security_name
+        candidate.trade_type = parsed_trade_type
+        candidate.trade_date = parsed_trade_date
+        candidate.trade_time = parsed_trade_time
+        candidate.quantity = parsed_quantity
+        candidate.price = parsed_price
+        candidate.gross_amount = parsed_gross_amount
+        candidate.net_amount = parsed_net_amount
+        candidate.commission = parsed_commission
+        candidate.fees = parsed_fees
+        candidate.currency = parsed_currency
+        candidate.position_balance_after = parsed_position_balance_after
+        candidate.review_status = "needs_review"
+        candidate.review_notes = None
+        candidate.dedupe_key = build_dedupe_key(
+            broker=candidate.broker,
+            account_alias=candidate.account_alias,
+            trade_date=candidate.trade_date,
+            trade_time=candidate.trade_time,
+            symbol=candidate.symbol,
+            trade_type=candidate.trade_type,
+            quantity=candidate.quantity,
+            price=candidate.price,
+            net_amount=candidate.net_amount,
+            currency=candidate.currency,
+        )
+        db.add(candidate)
+        db.commit()
         return RedirectResponse("/ui/review", status_code=303)
 
     @router.post("/ui/review/{candidate_id}/ignore")

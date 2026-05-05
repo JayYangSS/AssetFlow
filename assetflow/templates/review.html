@@ -16,6 +16,7 @@
         <td>{{ item.id }}</td><td>{{ item.review_status }}</td><td>{{ item.trade_date }}</td><td>{{ item.trade_time }}</td>
         <td>{{ item.symbol }}</td><td>{{ item.security_name }}</td><td>{{ item.trade_type }}</td><td>{{ item.quantity }}</td><td>{{ item.price }}</td><td>{{ item.net_amount }}</td>
         <td class="actions">
+          <a class="button-link secondary" href="/ui/review/{{ item.id }}/edit">编辑</a>
           <form method="post" action="/ui/review/{{ item.id }}/confirm"><button>确认</button></form>
           <form method="post" action="/ui/review/{{ item.id }}/ignore"><button>忽略</button></form>
         </td>

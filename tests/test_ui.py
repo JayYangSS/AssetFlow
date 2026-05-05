@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, time
 from decimal import Decimal
 from pathlib import Path, PurePosixPath
 
@@ -246,6 +246,98 @@ def test_ui_confirm_form_renders_error_for_incomplete_candidate(settings, sessio
     session.refresh(candidate)
     assert candidate.review_status == "needs_review"
     assert session.exec(select(Transaction)).all() == []
+
+
+def test_ui_review_page_links_to_candidate_edit_form(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+    candidate = CandidateTransaction(
+        upload_id=1,
+        ocr_result_id=1,
+        broker="htsc_global",
+        market="HK",
+        symbol="00700",
+        security_name="Tencent",
+        trade_type="buy",
+        trade_date=date(2026, 5, 4),
+        quantity=Decimal("100"),
+        price=Decimal("400"),
+        currency="HKD",
+        dedupe_key="ui-review-edit-link",
+        confidence=0.75,
+        review_status="needs_review",
+    )
+    session.add(candidate)
+    session.commit()
+    session.refresh(candidate)
+
+    response = client.get("/ui/review")
+
+    assert response.status_code == 200
+    assert f'href="/ui/review/{candidate.id}/edit"' in response.text
+    assert "编辑" in response.text
+
+
+def test_ui_edit_candidate_form_updates_and_confirms_candidate(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+    candidate = CandidateTransaction(
+        upload_id=1,
+        ocr_result_id=1,
+        broker="htsc_global",
+        market="HK",
+        symbol=None,
+        security_name="Tencent",
+        trade_type="buy",
+        trade_date=date(2026, 5, 4),
+        quantity=Decimal("100"),
+        price=Decimal("400"),
+        currency="HKD",
+        dedupe_key="ui-edit-candidate",
+        confidence=0.75,
+        review_status="needs_review",
+    )
+    session.add(candidate)
+    session.commit()
+    session.refresh(candidate)
+
+    edit_response = client.get(f"/ui/review/{candidate.id}/edit")
+
+    assert edit_response.status_code == 200
+    assert "编辑候选交易" in edit_response.text
+    assert 'name="net_amount"' in edit_response.text
+
+    save_response = client.post(
+        f"/ui/review/{candidate.id}/edit",
+        data={
+            "market": "HK",
+            "symbol": "00700",
+            "security_name": "Tencent",
+            "trade_type": "buy",
+            "trade_date": "2026-05-04",
+            "trade_time": "09:42:00",
+            "quantity": "100",
+            "price": "400",
+            "gross_amount": "40000",
+            "net_amount": "-40000",
+            "commission": "",
+            "fees": "",
+            "currency": "HKD",
+            "position_balance_after": "100",
+        },
+        follow_redirects=False,
+    )
+
+    assert save_response.status_code == 303
+    session.refresh(candidate)
+    assert candidate.symbol == "00700"
+    assert candidate.net_amount == Decimal("-40000.000000")
+    assert candidate.trade_time == time(9, 42)
+
+    confirm_response = client.post(f"/ui/review/{candidate.id}/confirm", follow_redirects=False)
+
+    assert confirm_response.status_code == 303
+    transaction = session.exec(select(Transaction)).one()
+    assert transaction.symbol == "00700"
+    assert transaction.net_amount == Decimal("-40000.000000")
 
 
 def test_ui_ignore_form_does_not_mutate_confirmed_candidate(settings, session) -> None:

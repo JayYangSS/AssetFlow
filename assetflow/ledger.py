@@ -14,11 +14,33 @@ REQUIRED_FIELDS = (
     "net_amount",
     "currency",
 )
+REQUIRED_FIELD_LABELS = {
+    "symbol": "证券代码",
+    "security_name": "证券名称",
+    "trade_type": "交易类型",
+    "trade_date": "交易日期",
+    "quantity": "数量",
+    "price": "价格",
+    "net_amount": "净额",
+    "currency": "币种",
+}
 ACTIONABLE_REVIEW_STATUSES = {"pending", "needs_review"}
 
 
+def missing_required_fields(candidate: CandidateTransaction) -> tuple[str, ...]:
+    return tuple(field for field in REQUIRED_FIELDS if getattr(candidate, field) is None)
+
+
+def missing_required_field_labels(candidate: CandidateTransaction) -> tuple[str, ...]:
+    return tuple(REQUIRED_FIELD_LABELS[field] for field in missing_required_fields(candidate))
+
+
+def format_missing_required_fields(candidate: CandidateTransaction) -> str:
+    return f"缺失字段：{'、'.join(missing_required_field_labels(candidate))}"
+
+
 def candidate_is_complete(candidate: CandidateTransaction) -> bool:
-    return all(getattr(candidate, field) is not None for field in REQUIRED_FIELDS)
+    return not missing_required_fields(candidate)
 
 
 def candidate_can_auto_confirm(candidate: CandidateTransaction, min_confidence: float) -> bool:
@@ -83,10 +105,11 @@ def confirm_candidate(session: Session, candidate_id: int) -> Transaction:
         return existing
     if not candidate_is_complete(candidate):
         candidate.review_status = "needs_review"
-        candidate.review_notes = "Missing required fields"
+        message = format_missing_required_fields(candidate)
+        candidate.review_notes = message
         session.add(candidate)
         session.commit()
-        raise ValueError("Candidate is missing required fields")
+        raise ValueError(message)
 
     transaction = Transaction(
         broker=candidate.broker,

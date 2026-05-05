@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -67,6 +68,39 @@ def test_confirm_candidate_rejects_ignored_candidate(settings, session) -> None:
     session.refresh(candidate)
     assert candidate.review_status == "ignored"
     assert session.exec(select(Transaction)).all() == []
+
+
+def test_confirm_candidate_reports_missing_required_field_names(settings, session) -> None:
+    candidate = CandidateTransaction(
+        upload_id=1,
+        ocr_result_id=1,
+        broker="htsc_global",
+        market="HK",
+        symbol=None,
+        security_name="Tencent",
+        trade_type="buy",
+        trade_date=date(2026, 5, 4),
+        quantity=Decimal("100"),
+        price=Decimal("400"),
+        currency="HKD",
+        dedupe_key="missing-field-details",
+        confidence=0.75,
+        review_status="needs_review",
+    )
+    session.add(candidate)
+    session.commit()
+    session.refresh(candidate)
+
+    with pytest.raises(ValueError) as exc_info:
+        confirm_candidate(session, candidate.id)
+
+    message = str(exc_info.value)
+    assert "缺失字段" in message
+    assert "证券代码" in message
+    assert "净额" in message
+    session.refresh(candidate)
+    assert candidate.review_status == "needs_review"
+    assert "证券代码" in candidate.review_notes
 
 
 def test_auto_confirm_dedupes_same_trade_with_different_decimal_scales(settings, session) -> None:
