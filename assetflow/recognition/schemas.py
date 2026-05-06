@@ -34,7 +34,7 @@ class RecognizedPosition(BaseModel):
     market: str | None = None
     symbol: str
     security_name: str | None = None
-    quantity: Decimal
+    quantity: Decimal | None = None
     available_quantity: Decimal | None = None
     cost_price: Decimal | None = None
     market_price: Decimal | None = None

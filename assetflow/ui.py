@@ -17,7 +17,8 @@ from assetflow.domain import SUPPORTED_CURRENCIES, TEMPLATE_TRADE_TYPES, build_d
 from assetflow.exporters.xlsx_template import export_transactions_to_template
 from assetflow.export_paths import resolve_export_output_path
 from assetflow.ledger import ACTIONABLE_REVIEW_STATUSES, confirm_candidate, ignore_candidate
-from assetflow.models import CandidateTransaction, Transaction
+from assetflow.models import CandidateTransaction, PositionSnapshot, Transaction
+from assetflow.position_snapshots import complete_position_value_triplet
 from assetflow.transaction_costs import estimate_transaction_costs
 from assetflow.upload_pipeline import process_uploaded_image
 from assetflow.uploads import InvalidUploadError
@@ -108,6 +109,22 @@ def create_ui_router(settings: Settings, get_session: Callable):
                 "error": error,
                 "trade_types": TEMPLATE_TRADE_TYPES,
                 "currencies": sorted(SUPPORTED_CURRENCIES),
+            },
+        )
+
+    def render_position_edit_response(
+        request: Request,
+        snapshot: PositionSnapshot,
+        error: str | None = None,
+    ):
+        return templates.TemplateResponse(
+            request,
+            "edit_position.html",
+            {
+                "settings": settings,
+                "active": "positions",
+                "position": snapshot,
+                "error": error,
             },
         )
 
@@ -324,6 +341,56 @@ def create_ui_router(settings: Settings, get_session: Callable):
             "positions.html",
             {"settings": settings, "active": "positions", "positions": latest_positions(db)},
         )
+
+    @router.get("/ui/positions/{snapshot_id}/edit")
+    def edit_position_page(snapshot_id: int, request: Request, db: Session = Depends(get_session)):
+        snapshot = db.get(PositionSnapshot, snapshot_id)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="Position snapshot not found")
+        return render_position_edit_response(request, snapshot)
+
+    @router.post("/ui/positions/{snapshot_id}/edit")
+    def edit_position_form(
+        snapshot_id: int,
+        request: Request,
+        db: Session = Depends(get_session),
+        quantity: str | None = Form(None),
+        available_quantity: str | None = Form(None),
+        cost_price: str | None = Form(None),
+        market_price: str | None = Form(None),
+        market_value: str | None = Form(None),
+        daily_pnl: str | None = Form(None),
+        unrealized_pnl: str | None = Form(None),
+    ):
+        snapshot = db.get(PositionSnapshot, snapshot_id)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="Position snapshot not found")
+        try:
+            parsed_quantity = _parse_optional_decimal(quantity, "数量")
+            parsed_available_quantity = _parse_optional_decimal(available_quantity, "可用")
+            parsed_cost_price = _parse_optional_decimal(cost_price, "成本价")
+            parsed_market_price = _parse_optional_decimal(market_price, "市价")
+            parsed_market_value = _parse_optional_decimal(market_value, "市值")
+            parsed_daily_pnl = _parse_optional_decimal(daily_pnl, "今日盈亏")
+            parsed_unrealized_pnl = _parse_optional_decimal(unrealized_pnl, "持仓盈亏")
+            parsed_quantity, parsed_market_price, parsed_market_value = complete_position_value_triplet(
+                quantity=parsed_quantity,
+                market_price=parsed_market_price,
+                market_value=parsed_market_value,
+            )
+        except ValueError as exc:
+            return render_position_edit_response(request, snapshot, error=str(exc))
+
+        snapshot.quantity = parsed_quantity
+        snapshot.available_quantity = parsed_available_quantity
+        snapshot.cost_price = parsed_cost_price
+        snapshot.market_price = parsed_market_price
+        snapshot.market_value = parsed_market_value
+        snapshot.daily_pnl = parsed_daily_pnl
+        snapshot.unrealized_pnl = parsed_unrealized_pnl
+        db.add(snapshot)
+        db.commit()
+        return RedirectResponse("/ui/positions", status_code=303)
 
     @router.get("/ui/cash")
     def cash_page(request: Request, db: Session = Depends(get_session)):

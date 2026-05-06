@@ -257,3 +257,113 @@ def test_process_position_result_merges_missing_fields_from_latest_snapshot(sett
     assert latest.daily_pnl == Decimal("-80.000000")
     assert latest.cost_price == Decimal("450.000000")
     assert latest.unrealized_pnl == Decimal("2220.000000")
+
+
+def test_process_position_result_accepts_partial_current_cost_snapshot(settings, session) -> None:
+    provider = FixtureVisionProvider(Path("tests/fixtures/recognition/positions.json"))
+    first_upload = store_upload(session, settings, "htsc_global", "ios_shortcut", "first.png", "image/png", b"\x89PNG\r\n\x1a\nfirst")
+    second_upload = store_upload(session, settings, "htsc_global", "ios_shortcut", "second.png", "image/png", b"\x89PNG\r\n\x1a\nsecond")
+    first_result = RecognizedScreenshot(
+        screenshot_type="positions",
+        confidence=0.95,
+        positions=[
+            RecognizedPosition(
+                broker="htsc_global",
+                market="HK",
+                symbol="00700",
+                security_name="腾讯控股",
+                quantity=Decimal("100"),
+                market_value=Decimal("47220"),
+                daily_pnl=Decimal("-80"),
+                currency="HKD",
+                snapshot_at="2026-05-05T10:00:00",
+                confidence=0.75,
+            )
+        ],
+    )
+    second_result = RecognizedScreenshot(
+        screenshot_type="positions",
+        confidence=0.95,
+        positions=[
+            RecognizedPosition(
+                broker="htsc_global",
+                market="HK",
+                symbol="00700",
+                security_name=None,
+                quantity=None,
+                cost_price=Decimal("489.552"),
+                market_price=Decimal("472.200"),
+                unrealized_pnl=Decimal("-1735.20"),
+                currency="HKD",
+                snapshot_at="2026-05-05T10:05:00",
+                confidence=0.75,
+            )
+        ],
+    )
+
+    process_recognition_result(session, first_upload, provider, first_result)
+    process_recognition_result(session, second_upload, provider, second_result)
+
+    snapshots = session.exec(select(PositionSnapshot).order_by(PositionSnapshot.id)).all()
+    latest = snapshots[-1]
+    assert len(snapshots) == 2
+    assert latest.security_name == "腾讯控股"
+    assert latest.quantity == Decimal("100.000000")
+    assert latest.market_value == Decimal("47220.000000")
+    assert latest.daily_pnl == Decimal("-80.000000")
+    assert latest.market_price == Decimal("472.200000")
+    assert latest.cost_price == Decimal("489.552000")
+    assert latest.unrealized_pnl == Decimal("-1735.200000")
+
+
+def test_process_position_result_does_not_merge_shifted_current_cost_fields(settings, session) -> None:
+    provider = FixtureVisionProvider(Path("tests/fixtures/recognition/positions.json"))
+    first_upload = store_upload(session, settings, "htsc_global", "ios_shortcut", "first.png", "image/png", b"\x89PNG\r\n\x1a\nfirst")
+    second_upload = store_upload(session, settings, "htsc_global", "ios_shortcut", "second.png", "image/png", b"\x89PNG\r\n\x1a\nsecond")
+    old_bug_result = RecognizedScreenshot(
+        screenshot_type="positions",
+        confidence=0.95,
+        positions=[
+            RecognizedPosition(
+                broker="htsc_global",
+                market="HK",
+                symbol="00700",
+                security_name="腾讯控股",
+                quantity=Decimal("489.552"),
+                market_value=Decimal("472.200"),
+                daily_pnl=Decimal("-1735.20"),
+                currency="HKD",
+                snapshot_at="2026-05-05T10:00:00",
+                confidence=0.75,
+            )
+        ],
+    )
+    current_cost_result = RecognizedScreenshot(
+        screenshot_type="positions",
+        confidence=0.95,
+        positions=[
+            RecognizedPosition(
+                broker="htsc_global",
+                market="HK",
+                symbol="00700",
+                security_name=None,
+                cost_price=Decimal("489.552"),
+                market_price=Decimal("472.200"),
+                unrealized_pnl=Decimal("-1735.20"),
+                currency="HKD",
+                snapshot_at="2026-05-05T10:05:00",
+                confidence=0.75,
+            )
+        ],
+    )
+
+    process_recognition_result(session, first_upload, provider, old_bug_result)
+    process_recognition_result(session, second_upload, provider, current_cost_result)
+
+    latest = session.exec(select(PositionSnapshot).order_by(PositionSnapshot.id)).all()[-1]
+    assert latest.quantity is None
+    assert latest.market_value is None
+    assert latest.daily_pnl is None
+    assert latest.market_price == Decimal("472.200000")
+    assert latest.cost_price == Decimal("489.552000")
+    assert latest.unrealized_pnl == Decimal("-1735.200000")

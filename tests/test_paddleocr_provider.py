@@ -169,6 +169,193 @@ def test_parse_htsc_compact_filled_order_list_accepts_row_ordered_ocr_lines() ->
     assert result.transactions[1].price == Decimal("102.300")
 
 
+def test_parse_htsc_compact_filled_order_list_accepts_noisy_market_tokens() -> None:
+    result = parse_htsc_global_ocr_lines(
+        [
+            "订单",
+            "已成交",
+            "时间",
+            "名称代码",
+            "买卖方向",
+            "数量丨价格",
+            "2025-07-15阿里巴巴-W",
+            "200",
+            "卖出",
+            "14:18",
+            "HK]",
+            "09988",
+            "112.200",
+            "2025-06-12阿里巴巴-W",
+            "200",
+            "买入",
+            "15:40",
+            "HK",
+            "09988",
+            "114.500",
+            "2025-06-05阿里巴巴-W",
+            "200",
+            "卖出",
+            "09:31",
+            "HK]",
+            "09988",
+            "118.000",
+        ],
+        broker="htsc_global",
+    )
+
+    assert result.screenshot_type == "trade_history"
+    assert len(result.transactions) == 3
+    assert [(item.trade_date.isoformat(), item.trade_type) for item in result.transactions] == [
+        ("2025-07-15", "sell"),
+        ("2025-06-12", "buy"),
+        ("2025-06-05", "sell"),
+    ]
+    assert result.transactions[0].market == "HK"
+    assert result.transactions[0].symbol == "09988"
+    assert result.transactions[0].price == Decimal("112.200")
+    assert result.transactions[2].price == Decimal("118.000")
+
+
+def test_parse_htsc_security_detail_transactions_treats_lottery_allocation_as_buy() -> None:
+    result = parse_htsc_global_ocr_lines(
+        [
+            "HK",
+            "曦智科技-P(01879)",
+            "累计盈亏T-1日盈亏收益",
+            "盈亏金额",
+            "交易明细",
+            "流水明细",
+            "日期",
+            "类型",
+            "实现金额",
+            "数量丨均价",
+            "04-28",
+            "2026",
+            "卖出",
+            "11,698.00",
+            "15.00",
+            "781.000",
+            "04-27",
+            "2026",
+            "中签",
+            "-2,874.71",
+            "15.00",
+            "183.200",
+        ],
+        broker="htsc_global",
+    )
+
+    assert result.screenshot_type == "trade_history"
+    assert result.confidence == 0.75
+    assert len(result.transactions) == 2
+    sell, allocation = result.transactions
+    assert sell.market == "HK"
+    assert sell.symbol == "01879"
+    assert sell.security_name == "曦智科技-P"
+    assert sell.trade_type == "sell"
+    assert sell.trade_date == date(2026, 4, 28)
+    assert sell.trade_time is None
+    assert sell.quantity == Decimal("15.00")
+    assert sell.price == Decimal("781.000")
+    assert sell.net_amount == Decimal("11698.00")
+    assert sell.gross_amount == Decimal("11715.00000")
+    assert sell.currency == "HKD"
+    assert allocation.trade_type == "buy"
+    assert allocation.trade_date == date(2026, 4, 27)
+    assert allocation.quantity == Decimal("15.00")
+    assert allocation.price == Decimal("183.200")
+    assert allocation.net_amount == Decimal("-2874.71")
+    assert allocation.gross_amount == Decimal("2748.00000")
+
+
+def test_parse_htsc_security_detail_transactions_accepts_real_ocr_line_order() -> None:
+    result = parse_htsc_global_ocr_lines(
+        [
+            "12:26 ≥",
+            "44",
+            "曦智科技-P（01879）",
+            "HK",
+            "累计盈亏为T-1日盈亏收益",
+            "盈亏金额",
+            "页=市值变动+进账金额－出账金额",
+            "盈亏金额（HKD）",
+            "建仓以来",
+            "+8.823.29",
+            "盈亏比例！",
+            "市值变动",
+            "0.00",
+            "进账金额",
+            "出账金额",
+            "11,698.00",
+            "2,874.71",
+            "卖出金额",
+            "11,698.00",
+            "买入金额",
+            "0.00",
+            "中签金额",
+            "2,874.71",
+            "交易明细",
+            "流水明细",
+            "全部",
+            "日期",
+            "类型",
+            "实现金额",
+            "数量|均价",
+            "04-28",
+            "15.00",
+            "卖出",
+            "11,698.00",
+            "2026",
+            "781.000",
+            "04-27",
+            "15.00",
+            "中签",
+            "-2,874.71",
+            "2026",
+            "183.200",
+            "我是有底线的~",
+        ],
+        broker="htsc_global",
+    )
+
+    assert result.screenshot_type == "trade_history"
+    assert result.confidence == 0.75
+    assert len(result.transactions) == 2
+    sell, allocation = result.transactions
+    assert sell.market == "HK"
+    assert sell.symbol == "01879"
+    assert sell.security_name == "曦智科技-P"
+    assert sell.trade_type == "sell"
+    assert sell.trade_date == date(2026, 4, 28)
+    assert sell.quantity == Decimal("15.00")
+    assert sell.price == Decimal("781.000")
+    assert sell.net_amount == Decimal("11698.00")
+    assert sell.gross_amount == Decimal("11715.00000")
+    assert sell.currency == "HKD"
+    assert allocation.trade_type == "buy"
+    assert allocation.trade_date == date(2026, 4, 27)
+    assert allocation.quantity == Decimal("15.00")
+    assert allocation.price == Decimal("183.200")
+    assert allocation.net_amount == Decimal("-2874.71")
+    assert allocation.gross_amount == Decimal("2748.00000")
+
+
+def test_parse_htsc_trade_history_does_not_emit_empty_fallback_transaction() -> None:
+    result = parse_htsc_global_ocr_lines(
+        [
+            "交易明细",
+            "日期",
+            "类型",
+            "实现金额",
+            "数量|均价",
+        ],
+        broker="htsc_global",
+    )
+
+    assert result.screenshot_type == "trade_history"
+    assert result.transactions == []
+
+
 def test_parse_htsc_compact_filled_order_list_ignores_invalid_month_day() -> None:
     result = parse_htsc_global_ocr_lines(
         [
@@ -277,6 +464,176 @@ def test_parse_htsc_positions_watchlist_screenshot() -> None:
     assert result.positions[4].security_name == "地平线机器人-W"
     assert result.positions[4].quantity == Decimal("29400")
     assert result.positions[5].symbol == "09988"
+
+
+def test_parse_htsc_positions_current_cost_screenshot_keeps_columns_aligned() -> None:
+    result = parse_htsc_global_ocr_lines(
+        [
+            "自选",
+            "持仓",
+            "订单",
+            "港股",
+            "名称代码",
+            "现价|成本",
+            "持仓盈亏",
+            "腾讯控股",
+            "472.200",
+            "-1,735.20",
+            "HK",
+            "00700",
+            "M",
+            "489.552",
+            "-3.54%",
+        ],
+        broker="htsc_global",
+    )
+
+    assert result.screenshot_type == "positions"
+    assert len(result.positions) == 1
+    position = result.positions[0]
+    assert position.security_name == "腾讯控股"
+    assert position.market == "HK"
+    assert position.symbol == "00700"
+    assert position.market_price == Decimal("472.200")
+    assert position.cost_price == Decimal("489.552")
+    assert position.unrealized_pnl == Decimal("-1735.20")
+    assert position.quantity is None
+    assert position.market_value is None
+    assert position.daily_pnl is None
+
+
+def test_parse_htsc_positions_market_value_screenshot_can_use_holding_pnl() -> None:
+    result = parse_htsc_global_ocr_lines(
+        [
+            "持仓",
+            "名称代码",
+            "市值|数量",
+            "持仓盈亏",
+            "腾讯控股",
+            "47,220.00",
+            "-1,735.20",
+            "HK",
+            "00700",
+            "M",
+            "100",
+            "-3.54%",
+        ],
+        broker="htsc_global",
+    )
+
+    assert result.screenshot_type == "positions"
+    assert len(result.positions) == 1
+    position = result.positions[0]
+    assert position.market_value == Decimal("47220.00")
+    assert position.quantity == Decimal("100")
+    assert position.unrealized_pnl == Decimal("-1735.20")
+    assert position.daily_pnl is None
+    assert position.market_price is None
+    assert position.cost_price is None
+
+
+def test_parse_htsc_us_positions_with_letter_tickers() -> None:
+    result = parse_htsc_global_ocr_lines(
+        [
+            "自选",
+            "持仓",
+            "订单",
+            "港股",
+            "美股",
+            "名称代码",
+            "市值|数量",
+            "今日盈亏",
+            "美国超微公司",
+            "3,552.60",
+            "137.20",
+            "US",
+            "AMD",
+            "10",
+            "+4.01%",
+            "谷歌-A",
+            "3,495.87",
+            "46.62",
+            "US",
+            "GOOGL",
+            "9",
+            "+1.35%",
+            "美光科技",
+            "3,841.20",
+            "382.50",
+            "US",
+            "MU",
+            "6",
+            "+11.05%",
+        ],
+        broker="htsc_global",
+    )
+
+    assert result.screenshot_type == "positions"
+    assert result.confidence == 0.75
+    assert len(result.positions) == 3
+    first = result.positions[0]
+    assert first.security_name == "美国超微公司"
+    assert first.market == "US"
+    assert first.symbol == "AMD"
+    assert first.currency == "USD"
+    assert first.market_value == Decimal("3552.60")
+    assert first.quantity == Decimal("10")
+    assert first.daily_pnl == Decimal("137.20")
+    assert first.unrealized_pnl is None
+    assert result.positions[1].symbol == "GOOGL"
+    assert result.positions[1].quantity == Decimal("9")
+    assert result.positions[2].symbol == "MU"
+    assert result.positions[2].daily_pnl == Decimal("382.50")
+
+
+def test_parse_htsc_us_positions_when_ocr_misses_quantity_lines() -> None:
+    result = parse_htsc_global_ocr_lines(
+        [
+            "持仓",
+            "美股",
+            "名称代码",
+            "市值|数量",
+            "今日盈亏",
+            "美国超微公司",
+            "3,552.60",
+            "137.20",
+            "US",
+            "AMD",
+            "10",
+            "+4.01%",
+            "谷歌-A",
+            "3,495.87",
+            "46.62",
+            "US",
+            "GOOGL",
+            "+1.35%",
+            "美光科技",
+            "异动?",
+            "3,841.20",
+            "382.50",
+            "US",
+            "MU",
+            "+11.05%",
+        ],
+        broker="htsc_global",
+    )
+
+    assert result.screenshot_type == "positions"
+    assert result.confidence == 0.75
+    assert len(result.positions) == 3
+    assert result.positions[0].symbol == "AMD"
+    assert result.positions[0].quantity == Decimal("10")
+    assert result.positions[0].daily_pnl == Decimal("137.20")
+    assert result.positions[1].security_name == "谷歌-A"
+    assert result.positions[1].symbol == "GOOGL"
+    assert result.positions[1].market_value == Decimal("3495.87")
+    assert result.positions[1].quantity is None
+    assert result.positions[1].daily_pnl == Decimal("46.62")
+    assert result.positions[2].security_name == "美光科技"
+    assert result.positions[2].symbol == "MU"
+    assert result.positions[2].market_value == Decimal("3841.20")
+    assert result.positions[2].quantity is None
+    assert result.positions[2].daily_pnl == Decimal("382.50")
 
 
 def test_make_provider_creates_paddleocr_provider() -> None:

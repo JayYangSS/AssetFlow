@@ -213,6 +213,24 @@ def test_create_db_and_tables_adds_position_daily_pnl_column(tmp_path: Path) -> 
     assert "daily_pnl" in column_names
 
 
+def test_create_db_and_tables_relaxes_position_quantity_column(tmp_path: Path) -> None:
+    settings = Settings(
+        assetflow_data_dir=tmp_path / "data",
+        assetflow_upload_token="secret-token",
+        assetflow_recognition_provider="fixture",
+    )
+    settings.ensure_directories()
+    engine = make_engine(settings.database_url)
+    create_legacy_position_snapshot_table_without_daily_pnl(engine)
+
+    create_db_and_tables(engine)
+
+    with engine.connect() as connection:
+        rows = connection.exec_driver_sql('PRAGMA table_info("positionsnapshot")').all()
+    not_null_by_name = {row[1]: row[3] for row in rows}
+    assert not_null_by_name["quantity"] == 0
+
+
 def test_sqlite_engine_uses_wal_and_busy_timeout(tmp_path: Path) -> None:
     settings = Settings(
         assetflow_data_dir=tmp_path / "data",

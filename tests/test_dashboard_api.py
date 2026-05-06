@@ -319,6 +319,57 @@ def test_latest_positions_breaks_snapshot_time_ties_by_greatest_id(settings, ses
     assert summary_response.json()["position_value_by_currency"]["HKD"] == "250.000000"
 
 
+def test_latest_positions_hides_shifted_current_cost_fields(settings, session) -> None:
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="position-shifted.png",
+        content_hash="position-shifted",
+        image_path=str(settings.upload_dir / "position-shifted.png"),
+        mime_type="image/png",
+        file_size_bytes=10,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    session.add(
+        PositionSnapshot(
+            upload_id=upload.id,
+            ocr_result_id=1,
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            quantity=Decimal("489.552"),
+            cost_price=Decimal("489.552"),
+            market_price=Decimal("472.200"),
+            market_value=Decimal("472.200"),
+            daily_pnl=Decimal("-1735.20"),
+            unrealized_pnl=Decimal("-1735.20"),
+            currency="HKD",
+            snapshot_at=datetime(2026, 5, 5, 10, 0),
+            confidence=0.75,
+        )
+    )
+    session.commit()
+
+    client = TestClient(create_app(settings=settings, session=session))
+    response = client.get("/api/positions/latest")
+    summary_response = client.get("/api/dashboard/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[0]["quantity"] is None
+    assert body[0]["market_value"] is None
+    assert body[0]["daily_pnl"] is None
+    assert body[0]["market_price"] == "472.200000"
+    assert body[0]["cost_price"] == "489.552000"
+    assert body[0]["unrealized_pnl"] == "-1735.200000"
+    assert summary_response.status_code == 200
+    assert "HKD" not in summary_response.json()["position_value_by_currency"]
+
+
 def test_latest_cash_breaks_snapshot_time_ties_by_greatest_id(settings, session) -> None:
     upload = Upload(
         broker="htsc_global",

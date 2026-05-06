@@ -81,3 +81,23 @@ def test_reconcile_mismatch_creates_issue(session) -> None:
     assert count == 1
     assert issue.expected_value == Decimal("100.000000")
     assert issue.observed_value == Decimal("80.000000")
+
+
+def test_reconcile_skips_position_snapshot_without_quantity(session) -> None:
+    session.add(PositionSnapshot(
+        upload_id=1,
+        ocr_result_id=1,
+        broker="htsc_global",
+        market="HK",
+        symbol="00700",
+        quantity=None,
+        currency="HKD",
+        snapshot_at=datetime(2026, 5, 1, 16),
+        confidence=0.95,
+    ))
+    session.commit()
+
+    count = reconcile_positions(session, broker="htsc_global")
+
+    assert count == 0
+    assert session.exec(select(ReconciliationIssue)).all() == []

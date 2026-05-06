@@ -1,4 +1,4 @@
-from datetime import date, time
+from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path, PurePosixPath
 
@@ -10,7 +10,7 @@ from sqlmodel import select
 import assetflow.export_paths as export_paths_module
 from assetflow.api import create_app
 from assetflow.exporters.xlsx_template import EXPECTED_HEADERS
-from assetflow.models import CandidateTransaction, Transaction, Upload
+from assetflow.models import CandidateTransaction, PositionSnapshot, Transaction, Upload
 
 
 def _make_export_template(path: Path) -> Path:
@@ -98,6 +98,142 @@ def test_ui_positions_page_labels_daily_and_holding_pnl(settings, session) -> No
     assert response.status_code == 200
     assert "今日盈亏" in response.text
     assert "持仓盈亏" in response.text
+
+
+def test_ui_positions_page_renders_missing_numbers_as_blank(settings, session) -> None:
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="positions.png",
+        content_hash="ui-positions-blank",
+        image_path=str(settings.upload_dir / "positions.png"),
+        mime_type="image/png",
+        file_size_bytes=10,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    session.add(
+        PositionSnapshot(
+            upload_id=upload.id,
+            ocr_result_id=1,
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            quantity=None,
+            cost_price=Decimal("489.552"),
+            market_price=Decimal("472.200"),
+            unrealized_pnl=Decimal("-1735.20"),
+            currency="HKD",
+            snapshot_at=datetime(2026, 5, 5, 10, 0),
+            confidence=0.75,
+        )
+    )
+    session.commit()
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get("/ui/positions")
+
+    assert response.status_code == 200
+    assert "None" not in response.text
+
+
+def test_ui_positions_page_links_to_position_edit_form(settings, session) -> None:
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="positions.png",
+        content_hash="ui-position-edit-link",
+        image_path=str(settings.upload_dir / "positions.png"),
+        mime_type="image/png",
+        file_size_bytes=10,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    snapshot = PositionSnapshot(
+        upload_id=upload.id,
+        ocr_result_id=1,
+        broker="htsc_global",
+        market="US",
+        symbol="GOOGL",
+        security_name="谷歌-A",
+        quantity=None,
+        market_value=Decimal("3495.87"),
+        daily_pnl=Decimal("46.62"),
+        currency="USD",
+        snapshot_at=datetime(2026, 5, 6, 9, 20),
+        confidence=0.75,
+    )
+    session.add(snapshot)
+    session.commit()
+    session.refresh(snapshot)
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get("/ui/positions")
+
+    assert response.status_code == 200
+    assert f'href="/ui/positions/{snapshot.id}/edit"' in response.text
+
+
+def test_ui_position_edit_form_updates_quantity_and_computes_market_price(settings, session) -> None:
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="positions.png",
+        content_hash="ui-position-edit-compute-price",
+        image_path=str(settings.upload_dir / "positions.png"),
+        mime_type="image/png",
+        file_size_bytes=10,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    snapshot = PositionSnapshot(
+        upload_id=upload.id,
+        ocr_result_id=1,
+        broker="htsc_global",
+        market="US",
+        symbol="GOOGL",
+        security_name="谷歌-A",
+        quantity=None,
+        market_value=Decimal("3495.87"),
+        daily_pnl=Decimal("46.62"),
+        currency="USD",
+        snapshot_at=datetime(2026, 5, 6, 9, 20),
+        confidence=0.75,
+    )
+    session.add(snapshot)
+    session.commit()
+    session.refresh(snapshot)
+    client = TestClient(create_app(settings=settings, session=session))
+
+    edit_response = client.get(f"/ui/positions/{snapshot.id}/edit")
+    save_response = client.post(
+        f"/ui/positions/{snapshot.id}/edit",
+        data={
+            "quantity": "9",
+            "available_quantity": "",
+            "cost_price": "",
+            "market_price": "",
+            "market_value": "3495.87",
+            "daily_pnl": "46.62",
+            "unrealized_pnl": "",
+        },
+        follow_redirects=False,
+    )
+
+    assert edit_response.status_code == 200
+    assert 'name="quantity"' in edit_response.text
+    assert save_response.status_code == 303
+    session.refresh(snapshot)
+    assert snapshot.quantity == Decimal("9.000000")
+    assert snapshot.market_value == Decimal("3495.870000")
+    assert snapshot.market_price == Decimal("388.430000")
 
 
 def test_upload_page_contains_file_form(settings, session) -> None:

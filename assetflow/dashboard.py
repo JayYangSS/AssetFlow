@@ -6,6 +6,7 @@ from sqlalchemy import and_, func
 from sqlmodel import Session, select
 
 from assetflow.models import CashSnapshot, CandidateTransaction, PositionSnapshot, Transaction, Upload
+from assetflow.position_snapshots import hide_shifted_current_cost_fields
 
 
 def _decimal_map_to_strings(values: dict[str, Decimal]) -> dict[str, str]:
@@ -60,11 +61,12 @@ def _latest_positions(session: Session) -> list[PositionSnapshot]:
         )
         .subquery()
     )
-    return session.exec(
+    positions = session.exec(
         select(PositionSnapshot)
         .join(latest_id, PositionSnapshot.id == latest_id.c.id)
         .order_by(PositionSnapshot.market, PositionSnapshot.symbol)
     ).all()
+    return [hide_shifted_current_cost_fields(position) for position in positions]
 
 
 def _latest_cash(session: Session) -> list[CashSnapshot]:
@@ -127,7 +129,8 @@ def dashboard_summary(session: Session) -> dict[str, object]:
         cash_by_currency[item.currency] += item.cash_balance or Decimal("0")
     position_value_by_currency: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
     for item in positions:
-        position_value_by_currency[item.currency] += item.market_value or Decimal("0")
+        if item.market_value is not None:
+            position_value_by_currency[item.currency] += item.market_value
     pending_review_count = session.exec(
         select(func.count(CandidateTransaction.id)).where(
             CandidateTransaction.review_status.in_(["pending", "needs_review"])

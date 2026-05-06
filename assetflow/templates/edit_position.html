@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}编辑持仓 - AssetFlow{% endblock %}
+{% block content %}
+<section class="page-header"><h1>编辑持仓</h1></section>
+{% if error %}
+<div class="alert error">{{ error }}</div>
+{% endif %}
+<form method="post" class="form-grid">
+  <label>市场 <input value="{{ position.market or '' }}" disabled></label>
+  <label>代码 <input value="{{ position.symbol }}" disabled></label>
+  <label>名称 <input value="{{ position.security_name or '' }}" disabled></label>
+  <label>数量 <input name="quantity" value="{{ position.quantity or '' }}" inputmode="decimal"></label>
+  <label>可用 <input name="available_quantity" value="{{ position.available_quantity or '' }}" inputmode="decimal"></label>
+  <label>成本价 <input name="cost_price" value="{{ position.cost_price or '' }}" inputmode="decimal"></label>
+  <label>市价 <input name="market_price" value="{{ position.market_price or '' }}" inputmode="decimal"></label>
+  <label>市值 <input name="market_value" value="{{ position.market_value or '' }}" inputmode="decimal"></label>
+  <label>今日盈亏 <input name="daily_pnl" value="{{ position.daily_pnl or '' }}" inputmode="decimal"></label>
+  <label>持仓盈亏 <input name="unrealized_pnl" value="{{ position.unrealized_pnl or '' }}" inputmode="decimal"></label>
+  <div class="form-actions">
+    <button type="submit">保存</button>
+    <a href="/ui/positions">返回</a>
+  </div>
+</form>
+{% endblock %}

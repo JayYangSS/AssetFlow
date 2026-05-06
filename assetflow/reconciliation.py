@@ -33,6 +33,8 @@ def reconcile_positions(session: Session, broker: str, account_alias: str | None
 
     created = 0
     for key, snapshot in latest.items():
+        if snapshot.quantity is None:
+            continue
         expected_quantity = expected.get(key, Decimal("0"))
         if expected_quantity == snapshot.quantity:
             continue

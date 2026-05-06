@@ -4,6 +4,7 @@ from sqlmodel import Session, select
 
 from assetflow.domain import build_dedupe_key
 from assetflow.models import CandidateTransaction, CashSnapshot, OcrResult, PositionSnapshot, Transaction, Upload
+from assetflow.position_snapshots import hide_shifted_current_cost_fields
 from assetflow.recognition.providers import VisionProvider
 from assetflow.recognition.schemas import RecognizedScreenshot, RecognizedTransaction
 from assetflow.transaction_costs import estimate_transaction_costs
@@ -83,6 +84,30 @@ def _merge_value(new_value, old_value):
     return new_value if new_value is not None else old_value
 
 
+def _looks_like_shifted_current_cost_merge(previous: PositionSnapshot, item) -> bool:
+    return (
+        item.quantity is None
+        and item.market_value is None
+        and item.daily_pnl is None
+        and item.cost_price is not None
+        and item.market_price is not None
+        and item.unrealized_pnl is not None
+        and previous.quantity == item.cost_price
+        and previous.market_value == item.market_price
+        and previous.daily_pnl == item.unrealized_pnl
+    )
+
+
+def _previous_for_position_merge(previous: PositionSnapshot | None, item) -> PositionSnapshot | None:
+    if previous is None:
+        return None
+    if _looks_like_shifted_current_cost_merge(previous, item):
+        values = {name: getattr(previous, name) for name in PositionSnapshot.model_fields}
+        values.update(quantity=None, market_value=None, daily_pnl=None)
+        return PositionSnapshot(**values)
+    return hide_shifted_current_cost_fields(previous)
+
+
 def process_recognition_result(
     session: Session,
     upload: Upload,
@@ -158,7 +183,7 @@ def process_recognition_result(
         session.add(candidate)
 
     for item in result.positions:
-        previous = _latest_position_snapshot(session, _position_identity(item))
+        previous = _previous_for_position_merge(_latest_position_snapshot(session, _position_identity(item)), item)
         session.add(
             PositionSnapshot(
                 upload_id=upload.id,
@@ -168,7 +193,7 @@ def process_recognition_result(
                 market=item.market,
                 symbol=item.symbol,
                 security_name=_merge_value(item.security_name, previous.security_name if previous else None),
-                quantity=item.quantity,
+                quantity=_merge_value(item.quantity, previous.quantity if previous else None),
                 available_quantity=_merge_value(
                     item.available_quantity, previous.available_quantity if previous else None
                 ),

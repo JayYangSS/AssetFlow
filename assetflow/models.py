@@ -105,7 +105,7 @@ class PositionSnapshot(SQLModel, table=True):
     market: str | None = None
     symbol: str
     security_name: str | None = None
-    quantity: Decimal = Field(sa_column=Column(Numeric(20, 6), nullable=False))
+    quantity: Decimal | None = Field(default=None, sa_column=money_column())
     available_quantity: Decimal | None = Field(default=None, sa_column=money_column())
     cost_price: Decimal | None = Field(default=None, sa_column=money_column())
     market_price: Decimal | None = Field(default=None, sa_column=money_column())
