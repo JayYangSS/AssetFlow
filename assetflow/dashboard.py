@@ -5,8 +5,12 @@ from decimal import Decimal
 from sqlalchemy import and_, func
 from sqlmodel import Session, select
 
+from assetflow.cash_movements import CASH_MOVEMENT_TYPES
 from assetflow.models import CashSnapshot, CandidateTransaction, PositionSnapshot, Transaction, Upload
 from assetflow.position_snapshots import hide_shifted_current_cost_fields
+
+
+CASH_MOVEMENT_TYPE_VALUES = tuple(sorted(CASH_MOVEMENT_TYPES))
 
 
 def _decimal_map_to_strings(values: dict[str, Decimal]) -> dict[str, str]:
@@ -136,7 +140,7 @@ def dashboard_summary(session: Session) -> dict[str, object]:
             CandidateTransaction.review_status.in_(["pending", "needs_review"])
         )
     ).one()
-    recent_transactions = session.exec(select(Transaction).order_by(Transaction.created_at.desc()).limit(10)).all()
+    recent_transactions = list_transactions(session, limit=10)
     latest_uploads = session.exec(select(Upload).order_by(Upload.created_at.desc()).limit(10)).all()
     recent_uploads = [_upload_payload(upload) for upload in latest_uploads]
     return {
@@ -159,7 +163,7 @@ def list_transactions(
     limit: int = 100,
 ) -> list[Transaction]:
     limit = min(max(limit, 1), 500)
-    query = select(Transaction)
+    query = select(Transaction).where(~Transaction.trade_type.in_(CASH_MOVEMENT_TYPE_VALUES))
     if currency:
         query = query.where(Transaction.currency == currency)
     if symbol:
@@ -171,6 +175,21 @@ def list_transactions(
     if date_to:
         query = query.where(Transaction.trade_date <= date_to)
     return session.exec(query.order_by(Transaction.trade_date.desc(), Transaction.created_at.desc()).limit(limit)).all()
+
+
+def list_cash_movements(
+    session: Session,
+    *,
+    currency: str | None = None,
+    limit: int = 100,
+) -> list[Transaction]:
+    limit = min(max(limit, 1), 500)
+    query = select(Transaction).where(Transaction.trade_type.in_(CASH_MOVEMENT_TYPE_VALUES))
+    if currency:
+        query = query.where(Transaction.currency == currency)
+    return session.exec(
+        query.order_by(Transaction.trade_date.desc(), Transaction.trade_time.desc(), Transaction.created_at.desc()).limit(limit)
+    ).all()
 
 
 def latest_positions(session: Session) -> list[PositionSnapshot]:

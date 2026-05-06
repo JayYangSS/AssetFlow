@@ -600,6 +600,54 @@ def test_ui_cash_movement_form_creates_transaction(settings, session) -> None:
     assert tx.net_amount == Decimal("1000.000000")
 
 
+def test_ui_routes_confirmed_cash_movements_to_cash_page(settings, session) -> None:
+    stock_tx = Transaction(
+        broker="htsc_global",
+        market="HK",
+        symbol="00700",
+        security_name="Tencent",
+        trade_type="buy",
+        trade_date=date(2026, 5, 4),
+        quantity=Decimal("100"),
+        price=Decimal("400"),
+        net_amount=Decimal("-40000"),
+        currency="HKD",
+        dedupe_key="ui-stock-only",
+        confidence=0.95,
+    )
+    cash_tx = Transaction(
+        broker="htsc_global",
+        symbol="CASH",
+        security_name="Cash",
+        trade_type="cash_in",
+        trade_date=date(2026, 5, 5),
+        trade_time=time(9, 35, 6),
+        quantity=Decimal("0"),
+        price=Decimal("0"),
+        gross_amount=Decimal("0"),
+        net_amount=Decimal("7000"),
+        currency="HKD",
+        dedupe_key="ui-cash-page-only",
+        confidence=0.75,
+    )
+    session.add(stock_tx)
+    session.add(cash_tx)
+    session.commit()
+    client = TestClient(create_app(settings=settings, session=session))
+
+    transactions_response = client.get("/ui/transactions")
+    cash_response = client.get("/ui/cash")
+
+    assert transactions_response.status_code == 200
+    assert cash_response.status_code == 200
+    assert "00700" in transactions_response.text
+    assert "CASH" not in transactions_response.text
+    assert "cash_in" not in transactions_response.text
+    assert "CASH" in cash_response.text
+    assert "cash_in" in cash_response.text
+    assert "7000.000000" in cash_response.text
+
+
 def test_ui_cash_movement_form_renders_error_for_invalid_amount(settings, session) -> None:
     client = TestClient(create_app(settings=settings, session=session))
 

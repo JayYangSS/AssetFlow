@@ -356,6 +356,187 @@ def test_parse_htsc_trade_history_does_not_emit_empty_fallback_transaction() -> 
     assert result.transactions == []
 
 
+def test_parse_htsc_cash_transfer_history_creates_cash_movement_transactions() -> None:
+    result = parse_htsc_global_ocr_lines(
+        [
+            "21:26 ≥",
+            "入金记录",
+            "出金记录",
+            "HKD",
+            "+7,000.00",
+            "转入成功",
+            "其他入金",
+            "04-0909:35:06",
+            "2020-12",
+            "HKD",
+            "+7,299.03",
+            "转入成功",
+            "其他入金",
+            "12-3110:55:43",
+            "2020-11",
+            "HKD",
+            "+1,300.00",
+            "转入成功",
+            "其他入金",
+            "11-2714:25:14",
+            "2020-08",
+            "HKD",
+            "+40,000.00",
+            "转入成功",
+            "其他入金",
+            "08-2510:02:13",
+            "HKD",
+            "+10,000.00",
+            "转入成功",
+            "其他入金",
+            "08-1914:51:30",
+            "HKD",
+            "+10,135.00",
+            "转入成功",
+            "其他入金",
+            "08-1911:13:47",
+            "HKD",
+            "+20,000.00",
+            "转入成功",
+            "其他入金",
+            "08-0419:45:59",
+        ],
+        broker="htsc_global",
+    )
+
+    assert result.screenshot_type == "cash"
+    assert result.confidence == 0.75
+    assert len(result.transactions) == 7
+    first = result.transactions[0]
+    assert first.symbol == "CASH"
+    assert first.security_name == "Cash"
+    assert first.trade_type == "cash_in"
+    assert first.trade_date == date(2021, 4, 9)
+    assert first.trade_time.isoformat() == "09:35:06"
+    assert first.quantity == Decimal("0")
+    assert first.price == Decimal("0")
+    assert first.net_amount == Decimal("7000.00")
+    assert first.currency == "HKD"
+    assert result.transactions[1].trade_date == date(2020, 12, 31)
+    assert result.transactions[1].net_amount == Decimal("7299.03")
+    assert result.transactions[-1].trade_date == date(2020, 8, 4)
+    assert result.transactions[-1].trade_time.isoformat() == "19:45:59"
+    assert result.transactions[-1].net_amount == Decimal("20000.00")
+
+
+def test_parse_htsc_cash_transfer_history_accepts_dot_between_date_and_time() -> None:
+    result = parse_htsc_global_ocr_lines(
+        [
+            "入金记录",
+            "出金记录",
+            "HKD",
+            "+1,174.60",
+            "转入成功",
+            "付款账户（9276）1银证转账",
+            "08-2612:47:14",
+            "2022-03",
+            "HKD",
+            "+10,000.02",
+            "转入成功",
+            "付款账户（9276）1银证转账",
+            "03-1509:16:41",
+            "2022-01",
+            "HKD",
+            "+24,567.24",
+            "转入成功",
+            "付款账户（9276）1银证转账",
+            "01-0612:43:19",
+            "2021-11",
+            "HKD",
+            "+40,000.00",
+            "转入成功",
+            "付款账户（9276）1银证转账",
+            "11-30.14:54:24",
+            "2021-10",
+            "HKD",
+            "+36,177.08",
+            "转入成功",
+            "付款账户（9276）1银证转账",
+            "10-0710:03:53",
+        ],
+        broker="htsc_global",
+    )
+
+    assert result.screenshot_type == "cash"
+    assert len(result.transactions) == 5
+    highlighted = result.transactions[3]
+    assert highlighted.trade_date == date(2021, 11, 30)
+    assert highlighted.trade_time.isoformat() == "14:54:24"
+    assert highlighted.net_amount == Decimal("40000.00")
+
+
+def test_parse_htsc_cash_out_history_with_chinese_currency_and_processed_status() -> None:
+    result = parse_htsc_global_ocr_lines(
+        [
+            "入金记录",
+            "出金记录",
+            "全部",
+            "共计10笔",
+            "港元",
+            "2025-09-05 19:03:28",
+            "4,347.63",
+            "已处理",
+            "港元",
+            "2025-09-05 14:26:48",
+            "60,000.00",
+            "已处理",
+            "港元",
+            "2025-06-1009:30:02",
+            "672.35",
+            "已处理",
+            "美元",
+            "2025-04-11 14:44:02",
+            "1,164.68",
+            "已处理",
+            "美元",
+            "2025-02-26 13:16:20",
+            "444.56",
+            "已处理",
+            "港元",
+            "2024-01-0309:55:13",
+            "61,092.13",
+            "已处理",
+            "港元",
+            "2023-12-29 12:19:12",
+            "15.807.32",
+            "已处理",
+            "港元",
+            "2023-12-2809:52:36",
+            "40.741.38",
+            "已处理",
+            "港元",
+            "2023-12-2713:46:16",
+            "200.00",
+            "已处理",
+            "港元",
+            "2023-09-1021:18:26",
+        ],
+        broker="htsc_global",
+    )
+
+    assert result.screenshot_type == "cash"
+    assert result.confidence == 0.75
+    assert len(result.transactions) == 9
+    first = result.transactions[0]
+    assert first.trade_type == "cash_out"
+    assert first.trade_date == date(2025, 9, 5)
+    assert first.trade_time.isoformat() == "14:26:48"
+    assert first.net_amount == Decimal("-4347.63")
+    assert first.currency == "HKD"
+    assert result.transactions[2].trade_date == date(2025, 4, 11)
+    assert result.transactions[2].currency == "USD"
+    assert result.transactions[6].net_amount == Decimal("-15807.32")
+    assert result.transactions[7].net_amount == Decimal("-40741.38")
+    assert result.transactions[-1].trade_date == date(2023, 9, 10)
+    assert result.transactions[-1].trade_time.isoformat() == "21:18:26"
+    assert result.transactions[-1].net_amount == Decimal("-200.00")
+
+
 def test_parse_htsc_compact_filled_order_list_ignores_invalid_month_day() -> None:
     result = parse_htsc_global_ocr_lines(
         [

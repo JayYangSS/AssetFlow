@@ -12,7 +12,14 @@ from sqlmodel import select
 
 from assetflow.cash_movements import create_cash_movement
 from assetflow.config import Settings
-from assetflow.dashboard import dashboard_summary, latest_cash, latest_positions, list_transactions, recent_uploads
+from assetflow.dashboard import (
+    dashboard_summary,
+    latest_cash,
+    latest_positions,
+    list_cash_movements,
+    list_transactions,
+    recent_uploads,
+)
 from assetflow.domain import SUPPORTED_CURRENCIES, TEMPLATE_TRADE_TYPES, build_dedupe_key
 from assetflow.exporters.xlsx_template import export_transactions_to_template
 from assetflow.export_paths import resolve_export_output_path
@@ -397,7 +404,14 @@ def create_ui_router(settings: Settings, get_session: Callable):
         return templates.TemplateResponse(
             request,
             "cash.html",
-            {"settings": settings, "active": "cash", "cash_items": latest_cash(db), "result": None, "error": None},
+            {
+                "settings": settings,
+                "active": "cash",
+                "cash_items": latest_cash(db),
+                "cash_movements": list_cash_movements(db),
+                "result": None,
+                "error": None,
+            },
         )
 
     @router.post("/ui/cash/movements")
@@ -429,6 +443,7 @@ def create_ui_router(settings: Settings, get_session: Callable):
                     "settings": settings,
                     "active": "cash",
                     "cash_items": latest_cash(db),
+                    "cash_movements": list_cash_movements(db),
                     "result": None,
                     "error": str(exc),
                 },

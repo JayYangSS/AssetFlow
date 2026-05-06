@@ -56,6 +56,15 @@ MARKET_CURRENCIES = {
     "SH": "CNY",
     "SZ": "CNY",
 }
+CASH_CURRENCIES = {"HKD", "USD", "CNY"}
+CASH_CURRENCY_ALIASES = {
+    "HKD": "HKD",
+    "港元": "HKD",
+    "USD": "USD",
+    "美元": "USD",
+    "CNY": "CNY",
+    "人民币": "CNY",
+}
 
 
 def flatten_paddleocr_result(raw_result: Any) -> list[str]:
@@ -414,6 +423,204 @@ def _parse_year_month_day(month_day: str, year: str | None) -> date | None:
         return None
 
 
+def _parse_year_month_header(value: str | None) -> tuple[int, int] | None:
+    if not value:
+        return None
+    match = re.fullmatch(r"((?:19|20)\d{2})[-/](\d{1,2})", value.strip())
+    if not match:
+        return None
+    year, month = (int(part) for part in match.groups())
+    if 1 <= month <= 12:
+        return year, month
+    return None
+
+
+def _parse_cash_transfer_datetime_parts(value: str | None) -> tuple[int, int, time] | None:
+    if not value:
+        return None
+    match = re.search(r"(\d{1,2})[-/](\d{1,2})[\s.。]*(\d{1,2}:\d{2}:\d{2})", value.strip())
+    if not match:
+        return None
+    month_text, day_text, time_text = match.groups()
+    parsed_time = _parse_time(time_text)
+    if parsed_time is None:
+        return None
+    month = int(month_text)
+    day = int(day_text)
+    if not (1 <= month <= 12 and 1 <= day <= 31):
+        return None
+    return month, day, parsed_time
+
+
+def _parse_cash_transfer_full_datetime(value: str | None) -> tuple[date, time] | None:
+    if not value:
+        return None
+    match = re.search(
+        r"((?:19|20)\d{2})[-/](\d{1,2})[-/](\d{1,2})[\s.。]*(\d{1,2}:\d{2}:\d{2})",
+        value.strip(),
+    )
+    if not match:
+        return None
+    year_text, month_text, day_text, time_text = match.groups()
+    parsed_time = _parse_time(time_text)
+    if parsed_time is None:
+        return None
+    try:
+        return date(int(year_text), int(month_text), int(day_text)), parsed_time
+    except ValueError:
+        return None
+
+
+def _parse_cash_currency(value: str | None) -> str | None:
+    if not value:
+        return None
+    stripped = value.strip()
+    normalized = stripped.upper()
+    return CASH_CURRENCY_ALIASES.get(normalized) or CASH_CURRENCY_ALIASES.get(stripped)
+
+
+def _parse_cash_transfer_amount(value: str | None) -> Decimal | None:
+    if not value or _parse_cash_transfer_datetime_parts(value) is not None:
+        return None
+    stripped = value.strip()
+    amount_match = re.fullmatch(r"([-+]?\d[\d,.]*)([,.]\d{2})", stripped)
+    if amount_match:
+        whole, cents = amount_match.groups()
+        normalized = re.sub(r"[,.]", "", whole) + "." + cents[1:]
+        try:
+            return Decimal(normalized)
+        except InvalidOperation:
+            return None
+    if not re.fullmatch(r"[-+]?\d[\d,]*(?:\.\d+)?", stripped):
+        return None
+    return _parse_decimal(stripped)
+
+
+def _cash_transfer_year(
+    *,
+    row_index: int,
+    month: int,
+    headers: list[tuple[int, int, int]],
+) -> int:
+    previous_headers = [header for header in headers if header[0] < row_index]
+    if previous_headers:
+        return previous_headers[-1][1]
+    next_headers = [header for header in headers if header[0] > row_index]
+    if next_headers:
+        _, next_year, next_month = next_headers[0]
+        return next_year + 1 if month < next_month else next_year
+    return date.today().year
+
+
+def _parse_processed_cash_transfer_rows(lines: list[str], broker: str) -> list[RecognizedTransaction]:
+    transactions: list[RecognizedTransaction] = []
+    for index, line in enumerate(lines):
+        currency = _parse_cash_currency(line)
+        if currency is None or index + 1 >= len(lines):
+            continue
+        datetime_value = _parse_cash_transfer_full_datetime(lines[index + 1])
+        if datetime_value is None:
+            continue
+        amount = None
+        for amount_line in reversed(lines[max(0, index - 3) : index]):
+            amount = _parse_cash_transfer_amount(amount_line)
+            if amount is not None:
+                break
+        if amount is None:
+            continue
+        trade_date, trade_time = datetime_value
+        transactions.append(
+            RecognizedTransaction(
+                broker=broker,
+                symbol="CASH",
+                security_name="Cash",
+                trade_type="cash_out",
+                trade_date=trade_date,
+                trade_time=trade_time,
+                quantity=Decimal("0"),
+                price=Decimal("0"),
+                gross_amount=Decimal("0"),
+                net_amount=-abs(amount),
+                currency=currency,
+                confidence=0.75,
+            )
+        )
+    return transactions
+
+
+def _parse_cash_transfer_rows(lines: list[str], broker: str) -> list[RecognizedTransaction]:
+    processed_transactions = _parse_processed_cash_transfer_rows(lines, broker)
+    if processed_transactions:
+        return processed_transactions
+
+    headers = [
+        (index, year_month[0], year_month[1])
+        for index, line in enumerate(lines)
+        if (year_month := _parse_year_month_header(line)) is not None
+    ]
+    transactions: list[RecognizedTransaction] = []
+    index = 0
+    while index < len(lines):
+        currency = _parse_cash_currency(lines[index])
+        if currency is None:
+            index += 1
+            continue
+
+        boundary = len(lines)
+        for cursor in range(index + 1, len(lines)):
+            if _parse_cash_currency(lines[cursor]) is not None or _parse_year_month_header(lines[cursor]) is not None:
+                boundary = cursor
+                break
+        row_lines = lines[index:boundary]
+        amount = next((_parse_cash_transfer_amount(line) for line in row_lines[1:] if _parse_cash_transfer_amount(line) is not None), None)
+        datetime_parts = next(
+            (
+                _parse_cash_transfer_datetime_parts(line)
+                for line in row_lines
+                if _parse_cash_transfer_datetime_parts(line) is not None
+            ),
+            None,
+        )
+        if amount is None or datetime_parts is None:
+            index += 1
+            continue
+
+        month, day, trade_time = datetime_parts
+        trade_year = _cash_transfer_year(row_index=index, month=month, headers=headers)
+        try:
+            trade_date = date(trade_year, month, day)
+        except ValueError:
+            index = boundary
+            continue
+
+        joined_row = " ".join(row_lines)
+        if "转出" in joined_row or "出金" in joined_row:
+            trade_type = "cash_out"
+            net_amount = -abs(amount)
+        else:
+            trade_type = "cash_in"
+            net_amount = abs(amount)
+
+        transactions.append(
+            RecognizedTransaction(
+                broker=broker,
+                symbol="CASH",
+                security_name="Cash",
+                trade_type=trade_type,
+                trade_date=trade_date,
+                trade_time=trade_time,
+                quantity=Decimal("0"),
+                price=Decimal("0"),
+                gross_amount=Decimal("0"),
+                net_amount=net_amount,
+                currency=currency,
+                confidence=0.75,
+            )
+        )
+        index = boundary
+    return transactions
+
+
 def _parse_security_detail_amount_quantity_price(
     row_lines: list[str],
 ) -> tuple[Decimal, Decimal, Decimal] | None:
@@ -498,6 +705,8 @@ def _parse_security_detail_transaction_rows(lines: list[str], broker: str) -> li
 
 def _guess_screenshot_type(lines: list[str]) -> str:
     joined = " ".join(lines)
+    if any(keyword in joined for keyword in ("入金记录", "出金记录", "转入成功", "转出成功", "其他入金", "其他出金")):
+        return "cash"
     if any(keyword in joined for keyword in ("交易明细", "实现金额", "中签")):
         return "trade_history"
     if any(keyword in joined for keyword in ("成交记录", "成交日期", "交易类别", "成交价格")):
@@ -635,6 +844,13 @@ def _parse_position_rows(lines: list[str], broker: str) -> list[RecognizedPositi
 
 def parse_htsc_global_ocr_lines(lines: list[str], broker: str) -> RecognizedScreenshot:
     screenshot_type = _guess_screenshot_type(lines)
+    if screenshot_type == "cash":
+        cash_transactions = _parse_cash_transfer_rows(lines, broker)
+        return RecognizedScreenshot(
+            screenshot_type="cash",
+            confidence=0.75 if cash_transactions else 0.40,
+            transactions=cash_transactions,
+        )
     if screenshot_type == "positions":
         positions = _parse_position_rows(lines, broker)
         return RecognizedScreenshot(
