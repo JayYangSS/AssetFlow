@@ -826,3 +826,284 @@ def test_ui_upload_image_endpoint_rejects_paths_outside_upload_dir(settings, ses
     response = client.get(f"/ui/uploads/{upload.id}/image")
 
     assert response.status_code == 404
+
+
+def test_ui_dashboard_renders_asset_totals_and_recent_transaction_name(settings, session) -> None:
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="dashboard.png",
+        content_hash="ui-dashboard-assets",
+        image_path=str(settings.upload_dir / "dashboard.png"),
+        mime_type="image/png",
+        file_size_bytes=10,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    session.add(
+        PositionSnapshot(
+            upload_id=upload.id,
+            ocr_result_id=1,
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            quantity=Decimal("100"),
+            market_value=Decimal("8000"),
+            currency="HKD",
+            snapshot_at=datetime(2026, 5, 7, 10, 0),
+            confidence=0.9,
+        )
+    )
+    session.add(
+        Transaction(
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            trade_type="buy",
+            trade_date=date(2026, 5, 7),
+            quantity=Decimal("100"),
+            price=Decimal("80"),
+            net_amount=Decimal("-8000"),
+            currency="HKD",
+            dedupe_key="ui-dashboard-name",
+            confidence=0.95,
+        )
+    )
+    session.commit()
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get("/ui")
+
+    assert response.status_code == 200
+    assert "资产汇总" in response.text
+    assert "持仓市值" in response.text
+    assert "合计资产" in response.text
+    assert "8000.000000" in response.text
+    assert "Tencent" in response.text
+
+
+def test_ui_transactions_page_renders_investment_return_summary(settings, session) -> None:
+    for tx in [
+        Transaction(
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            trade_type="buy",
+            trade_date=date(2026, 1, 2),
+            quantity=Decimal("100"),
+            price=Decimal("10"),
+            net_amount=Decimal("-1008"),
+            fees=Decimal("8"),
+            currency="HKD",
+            dedupe_key="ui-return-buy",
+            confidence=0.95,
+        ),
+        Transaction(
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            trade_type="sell",
+            trade_date=date(2026, 2, 3),
+            quantity=Decimal("40"),
+            price=Decimal("12"),
+            net_amount=Decimal("480"),
+            fees=Decimal("5"),
+            currency="HKD",
+            dedupe_key="ui-return-sell",
+            confidence=0.95,
+        ),
+        Transaction(
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            trade_type="dividend",
+            trade_date=date(2026, 3, 4),
+            quantity=Decimal("0"),
+            price=Decimal("0"),
+            net_amount=Decimal("12"),
+            currency="HKD",
+            dedupe_key="ui-return-dividend",
+            confidence=0.95,
+        ),
+        Transaction(
+            broker="htsc_global",
+            symbol="CASH",
+            security_name="Cash",
+            trade_type="fee",
+            trade_date=date(2026, 3, 5),
+            quantity=Decimal("0"),
+            price=Decimal("0"),
+            net_amount=Decimal("-3"),
+            currency="HKD",
+            dedupe_key="ui-return-fee",
+            confidence=0.95,
+        ),
+    ]:
+        session.add(tx)
+    session.commit()
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get("/ui/transactions")
+
+    assert response.status_code == 200
+    assert "投资收益" in response.text
+    assert "总收益" in response.text
+    assert "买卖已实现盈亏" in response.text
+    assert "分红收入" in response.text
+    assert "额外费用" in response.text
+    assert "85.800000" in response.text
+    assert "76.800000" in response.text
+    assert "12.000000" in response.text
+    assert "3.000000" in response.text
+    assert "cash_in" not in response.text
+
+
+def test_ui_dashboard_and_upload_pages_link_to_uploaded_images(settings, session) -> None:
+    image_path = settings.upload_dir / "linked.png"
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\nlinked")
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="linked.png",
+        content_hash="ui-linked-image",
+        image_path=str(image_path),
+        mime_type="image/png",
+        file_size_bytes=16,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    client = TestClient(create_app(settings=settings, session=session))
+
+    dashboard_response = client.get("/ui")
+    upload_response = client.get("/ui/upload")
+    expected_href = f'href="/ui/uploads/{upload.id}/image"'
+
+    assert dashboard_response.status_code == 200
+    assert upload_response.status_code == 200
+    assert expected_href in dashboard_response.text
+    assert expected_href in upload_response.text
+    assert "查看" in dashboard_response.text
+    assert "查看" in upload_response.text
+    assert str(settings.upload_dir) not in dashboard_response.text
+    assert str(settings.upload_dir) not in upload_response.text
+    assert str(image_path) not in dashboard_response.text
+    assert str(image_path) not in upload_response.text
+    assert "image_path" not in dashboard_response.text
+    assert "image_path" not in upload_response.text
+    assert "local_path" not in dashboard_response.text
+    assert "local_path" not in upload_response.text
+
+
+def test_ui_transaction_pages_do_not_render_none_for_optional_transaction_fields(settings, session) -> None:
+    transaction = Transaction(
+        broker="htsc_global",
+        market="HK",
+        symbol="00700",
+        security_name="",
+        trade_type="buy",
+        trade_date=date(2026, 5, 7),
+        trade_time=None,
+        quantity=Decimal("100"),
+        price=Decimal("80"),
+        net_amount=Decimal("-8000"),
+        currency="HKD",
+        dedupe_key="ui-none-optional-fields",
+        confidence=0.95,
+    )
+    session.add(transaction)
+    session.commit()
+    client = TestClient(create_app(settings=settings, session=session))
+
+    dashboard_response = client.get("/ui")
+    transactions_response = client.get("/ui/transactions")
+
+    assert dashboard_response.status_code == 200
+    assert transactions_response.status_code == 200
+    assert ">None<" not in dashboard_response.text
+    assert ">None<" not in transactions_response.text
+
+
+def test_ui_transactions_filter_applies_to_rows_and_return_summary(settings, session) -> None:
+    matching_transactions = [
+        Transaction(
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            trade_type="buy",
+            trade_date=date(2026, 1, 2),
+            quantity=Decimal("100"),
+            price=Decimal("10"),
+            net_amount=Decimal("-1000"),
+            currency="HKD",
+            dedupe_key="ui-filter-return-buy",
+            confidence=0.95,
+        ),
+        Transaction(
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            trade_type="sell",
+            trade_date=date(2026, 2, 3),
+            quantity=Decimal("10"),
+            price=Decimal("15"),
+            net_amount=Decimal("150"),
+            currency="HKD",
+            dedupe_key="ui-filter-return-sell",
+            confidence=0.95,
+        ),
+    ]
+    nonmatching_transactions = [
+        Transaction(
+            broker="htsc_global",
+            market="US",
+            symbol="AAPL",
+            security_name="Apple",
+            trade_type="buy",
+            trade_date=date(2026, 1, 4),
+            quantity=Decimal("100"),
+            price=Decimal("20"),
+            net_amount=Decimal("-2000"),
+            currency="USD",
+            dedupe_key="ui-filter-return-usd-buy",
+            confidence=0.95,
+        ),
+        Transaction(
+            broker="htsc_global",
+            market="US",
+            symbol="AAPL",
+            security_name="Apple",
+            trade_type="sell",
+            trade_date=date(2026, 2, 5),
+            quantity=Decimal("10"),
+            price=Decimal("25"),
+            net_amount=Decimal("250"),
+            currency="USD",
+            dedupe_key="ui-filter-return-usd-sell",
+            confidence=0.95,
+        ),
+    ]
+    for tx in [*matching_transactions, *nonmatching_transactions]:
+        session.add(tx)
+    session.commit()
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get("/ui/transactions?currency=HKD&symbol=00700")
+
+    assert response.status_code == 200
+    assert "Tencent" in response.text
+    assert "50.000000" in response.text
+    assert "Apple" not in response.text
+    assert "AAPL" not in response.text
+    assert "USD" not in response.text
+    assert "250.000000" not in response.text

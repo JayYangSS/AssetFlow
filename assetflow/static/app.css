@@ -239,6 +239,15 @@ button:hover,
   background: #dfe4ea;
 }
 
+.inline-link {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.inline-link:hover {
+  text-decoration: underline;
+}
+
 .filters {
   margin-bottom: 16px;
   border: 1px solid var(--border);

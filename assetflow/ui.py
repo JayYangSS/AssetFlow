@@ -19,6 +19,7 @@ from assetflow.dashboard import (
     list_cash_movements,
     list_transactions,
     recent_uploads,
+    transaction_profit_summary,
 )
 from assetflow.domain import SUPPORTED_CURRENCIES, TEMPLATE_TRADE_TYPES, build_dedupe_key
 from assetflow.exporters.xlsx_template import export_transactions_to_template
@@ -359,6 +360,7 @@ def create_ui_router(settings: Settings, get_session: Callable):
                 "settings": settings,
                 "active": "transactions",
                 "transactions": list_transactions(db, currency=currency, symbol=symbol),
+                "return_summaries": transaction_profit_summary(db, currency=currency, symbol=symbol),
                 "currency": currency or "",
                 "symbol": symbol or "",
             },
