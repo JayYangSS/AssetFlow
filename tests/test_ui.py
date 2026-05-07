@@ -747,3 +747,82 @@ def test_ui_export_form_reports_missing_template(settings, session, tmp_path) ->
 
     assert response.status_code == 200
     assert "导出失败" in response.text
+
+
+def test_ui_upload_image_endpoint_serves_original_upload(settings, session) -> None:
+    image_path = settings.upload_dir / "sample.png"
+    image_bytes = b"\x89PNG\r\n\x1a\nsample"
+    image_path.write_bytes(image_bytes)
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="sample.png",
+        content_hash="ui-image-serve",
+        image_path=str(image_path),
+        mime_type="image/png",
+        file_size_bytes=len(image_bytes),
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get(f"/ui/uploads/{upload.id}/image")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert "inline" in response.headers["content-disposition"]
+    assert response.content == image_bytes
+
+
+def test_ui_upload_image_endpoint_returns_404_for_missing_upload(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get("/ui/uploads/999/image")
+
+    assert response.status_code == 404
+
+
+def test_ui_upload_image_endpoint_returns_404_for_missing_file(settings, session) -> None:
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="missing.png",
+        content_hash="ui-image-missing-file",
+        image_path=str(settings.upload_dir / "missing.png"),
+        mime_type="image/png",
+        file_size_bytes=7,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get(f"/ui/uploads/{upload.id}/image")
+
+    assert response.status_code == 404
+
+
+def test_ui_upload_image_endpoint_rejects_paths_outside_upload_dir(settings, session, tmp_path) -> None:
+    outside_path = tmp_path / "outside.png"
+    outside_path.write_bytes(b"outside")
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="outside.png",
+        content_hash="ui-image-outside",
+        image_path=str(outside_path),
+        mime_type="image/png",
+        file_size_bytes=7,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get(f"/ui/uploads/{upload.id}/image")
+
+    assert response.status_code == 404
