@@ -436,3 +436,173 @@ def test_uploads_api_hides_local_storage_fields(settings, session) -> None:
     assert body[0]["original_filename"] == "trade.png"
     assert "image_path" not in body[0]
     assert "content_hash" not in body[0]
+
+
+def test_dashboard_summary_includes_asset_totals_by_currency(settings, session) -> None:
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="assets.png",
+        content_hash="asset-totals",
+        image_path=str(settings.upload_dir / "assets.png"),
+        mime_type="image/png",
+        file_size_bytes=10,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    session.add(
+        PositionSnapshot(
+            upload_id=upload.id,
+            ocr_result_id=1,
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            quantity=Decimal("100"),
+            market_value=Decimal("8000"),
+            currency="HKD",
+            snapshot_at=datetime(2026, 5, 7, 10, 0),
+            confidence=0.9,
+        )
+    )
+    session.add(
+        CashSnapshot(
+            upload_id=upload.id,
+            ocr_result_id=1,
+            broker="htsc_global",
+            currency="HKD",
+            cash_balance=Decimal("1200"),
+            snapshot_at=datetime(2026, 5, 7, 10, 0),
+            confidence=0.9,
+        )
+    )
+    session.add(
+        CashSnapshot(
+            upload_id=upload.id,
+            ocr_result_id=1,
+            broker="htsc_global",
+            currency="USD",
+            cash_balance=Decimal("300"),
+            snapshot_at=datetime(2026, 5, 7, 10, 0),
+            confidence=0.9,
+        )
+    )
+    session.commit()
+
+    client = TestClient(create_app(settings=settings, session=session))
+    response = client.get("/api/dashboard/summary")
+
+    assert response.status_code == 200
+    assert response.json()["asset_totals"] == [
+        {
+            "currency": "HKD",
+            "position_value": "8000.000000",
+            "cash_balance": "1200.000000",
+            "total_assets": "9200.000000",
+        },
+        {
+            "currency": "USD",
+            "position_value": "0",
+            "cash_balance": "300.000000",
+            "total_assets": "300.000000",
+        },
+    ]
+
+
+def test_transaction_profit_summary_returns_dividends_fees_and_fifo_pnl(settings, session) -> None:
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="returns.png",
+        content_hash="return-summary",
+        image_path=str(settings.upload_dir / "returns.png"),
+        mime_type="image/png",
+        file_size_bytes=10,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    for tx in [
+        Transaction(
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            trade_type="buy",
+            trade_date=date(2026, 1, 2),
+            quantity=Decimal("100"),
+            price=Decimal("10"),
+            net_amount=Decimal("-1008"),
+            fees=Decimal("8"),
+            currency="HKD",
+            dedupe_key="summary-buy",
+            confidence=0.95,
+        ),
+        Transaction(
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            trade_type="sell",
+            trade_date=date(2026, 2, 3),
+            quantity=Decimal("40"),
+            price=Decimal("12"),
+            net_amount=Decimal("480"),
+            fees=Decimal("5"),
+            currency="HKD",
+            dedupe_key="summary-sell",
+            confidence=0.95,
+        ),
+        Transaction(
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            trade_type="dividend",
+            trade_date=date(2026, 3, 4),
+            quantity=Decimal("0"),
+            price=Decimal("0"),
+            net_amount=Decimal("12"),
+            currency="HKD",
+            dedupe_key="summary-dividend",
+            confidence=0.95,
+        ),
+        Transaction(
+            broker="htsc_global",
+            symbol="CASH",
+            security_name="Cash",
+            trade_type="fee",
+            trade_date=date(2026, 3, 5),
+            quantity=Decimal("0"),
+            price=Decimal("0"),
+            net_amount=Decimal("-3"),
+            currency="HKD",
+            dedupe_key="summary-fee",
+            confidence=0.95,
+        ),
+    ]:
+        session.add(tx)
+    session.commit()
+
+    from assetflow.dashboard import transaction_profit_summary
+
+    summaries = transaction_profit_summary(session)
+
+    assert summaries == [
+        {
+            "currency": "HKD",
+            "total_return": "85.800000",
+            "realized_pnl": "76.800000",
+            "dividends": "12.000000",
+            "extra_fees": "3.000000",
+            "sell_proceeds": "480.000000",
+            "matched_cost": "403.200000",
+            "sell_quantity": "40.000000",
+            "unmatched_quantity": "0",
+            "transaction_count": 4,
+            "incomplete_count": 0,
+        }
+    ]
