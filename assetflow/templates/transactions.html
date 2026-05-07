@@ -29,7 +29,7 @@
     <tbody>
     {% for item in transactions %}
       <tr>
-        <td>{{ item.id }}</td><td>{{ item.trade_date }}</td><td>{{ optional(item.trade_time) }}</td><td>{{ item.market }}</td><td>{{ item.symbol }}</td><td>{{ optional(item.security_name) }}</td><td>{{ item.trade_type }}</td><td>{{ item.quantity }}</td><td>{{ item.price }}</td><td>{{ item.net_amount }}</td><td>{{ item.currency }}</td><td>{{ item.status }}</td>
+        <td>{{ item.id }}</td><td>{{ item.trade_date }}</td><td>{{ optional(item.trade_time) }}</td><td>{{ optional(item.market) }}</td><td>{{ item.symbol }}</td><td>{{ optional(item.security_name) }}</td><td>{{ item.trade_type }}</td><td>{{ item.quantity }}</td><td>{{ item.price }}</td><td>{{ item.net_amount }}</td><td>{{ item.currency }}</td><td>{{ item.status }}</td>
       </tr>
     {% else %}
       <tr><td colspan="12">暂无交易流水。</td></tr>

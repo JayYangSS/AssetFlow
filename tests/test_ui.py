@@ -828,6 +828,29 @@ def test_ui_upload_image_endpoint_rejects_paths_outside_upload_dir(settings, ses
     assert response.status_code == 404
 
 
+def test_ui_upload_image_endpoint_rejects_non_image_mime_type(settings, session) -> None:
+    image_path = settings.upload_dir / "not-an-image.html"
+    image_path.write_text("<html></html>")
+    upload = Upload(
+        broker="htsc_global",
+        source="web",
+        original_filename="not-an-image.html",
+        content_hash="ui-image-wrong-mime",
+        image_path=str(image_path),
+        mime_type="text/html",
+        file_size_bytes=13,
+        status="recognized",
+    )
+    session.add(upload)
+    session.commit()
+    session.refresh(upload)
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get(f"/ui/uploads/{upload.id}/image")
+
+    assert response.status_code == 404
+
+
 def test_ui_dashboard_renders_asset_totals_and_recent_transaction_name(settings, session) -> None:
     upload = Upload(
         broker="htsc_global",
@@ -1006,7 +1029,7 @@ def test_ui_dashboard_and_upload_pages_link_to_uploaded_images(settings, session
 def test_ui_transaction_pages_do_not_render_none_for_optional_transaction_fields(settings, session) -> None:
     transaction = Transaction(
         broker="htsc_global",
-        market="HK",
+        market=None,
         symbol="00700",
         security_name="",
         trade_type="buy",

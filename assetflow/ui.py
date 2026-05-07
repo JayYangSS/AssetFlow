@@ -29,7 +29,7 @@ from assetflow.models import CandidateTransaction, PositionSnapshot, Transaction
 from assetflow.position_snapshots import complete_position_value_triplet
 from assetflow.transaction_costs import estimate_transaction_costs
 from assetflow.upload_pipeline import process_uploaded_image
-from assetflow.uploads import InvalidUploadError
+from assetflow.uploads import ALLOWED_CONTENT_TYPES, InvalidUploadError
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -221,6 +221,8 @@ def create_ui_router(settings: Settings, get_session: Callable):
         upload = db.get(Upload, upload_id)
         if upload is None:
             raise HTTPException(status_code=404, detail="Upload not found")
+        if upload.mime_type not in ALLOWED_CONTENT_TYPES:
+            raise HTTPException(status_code=404, detail="Upload image not found")
         return FileResponse(
             resolve_upload_image_path(upload),
             media_type=upload.mime_type,
