@@ -240,12 +240,14 @@ button:hover,
 }
 
 .inline-link {
-  color: var(--accent);
-  font-weight: 700;
+  color: #1d4ed8;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .inline-link:hover {
-  text-decoration: underline;
+  color: #1e40af;
 }
 
 .filters {

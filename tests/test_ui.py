@@ -58,7 +58,7 @@ def test_ui_dashboard_page_returns_html(settings, session) -> None:
     assert "text/html" in response.headers["content-type"]
     assert "AssetFlow" in response.text
     assert "总览" in response.text
-    assert 'href="http://testserver/static/app.css"' in response.text
+    assert 'href="http://testserver/static/app.css?v=' in response.text
 
 
 def test_ui_navigation_links_core_pages(settings, session) -> None:
@@ -1014,8 +1014,13 @@ def test_ui_dashboard_and_upload_pages_link_to_uploaded_images(settings, session
     assert upload_response.status_code == 200
     assert expected_href in dashboard_response.text
     assert expected_href in upload_response.text
-    assert "查看" in dashboard_response.text
-    assert "查看" in upload_response.text
+    assert f'<a class="inline-link" href="/ui/uploads/{upload.id}/image" target="_blank" rel="noopener">linked.png</a>' in dashboard_response.text
+    assert f'<a class="inline-link" href="/ui/uploads/{upload.id}/image" target="_blank" rel="noopener">linked.png</a>' in upload_response.text
+    assert "<th>操作</th>" not in dashboard_response.text
+    assert "<th>操作</th>" not in upload_response.text
+    assert ">查看<" not in dashboard_response.text
+    assert ">查看<" not in upload_response.text
+    assert "查看截图" not in upload_response.text
     assert str(settings.upload_dir) not in dashboard_response.text
     assert str(settings.upload_dir) not in upload_response.text
     assert str(image_path) not in dashboard_response.text
@@ -1024,6 +1029,28 @@ def test_ui_dashboard_and_upload_pages_link_to_uploaded_images(settings, session
     assert "image_path" not in upload_response.text
     assert "local_path" not in dashboard_response.text
     assert "local_path" not in upload_response.text
+
+
+def test_ui_inline_links_look_like_clickable_hyperlinks(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get("/static/app.css")
+
+    assert response.status_code == 200
+    css = response.text.replace("\r\n", "\n")
+    start = css.index(".inline-link {")
+    block = css[start : css.index("}", start)]
+    assert "color: #1d4ed8;" in block
+    assert "text-decoration: underline;" in block
+
+
+def test_ui_pages_use_versioned_static_css_url(settings, session) -> None:
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get("/ui/upload")
+
+    assert response.status_code == 200
+    assert "/static/app.css?v=" in response.text
 
 
 def test_ui_transaction_pages_do_not_render_none_for_optional_transaction_fields(settings, session) -> None:

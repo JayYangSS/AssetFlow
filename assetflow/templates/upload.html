@@ -14,12 +14,12 @@
   <h2>最近上传</h2>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>ID</th><th>券商</th><th>账户</th><th>文件</th><th>类型</th><th>大小</th><th>状态</th><th>操作</th></tr></thead>
+      <thead><tr><th>ID</th><th>券商</th><th>账户</th><th>文件</th><th>类型</th><th>大小</th><th>状态</th></tr></thead>
       <tbody>
       {% for item in uploads %}
-        <tr><td>{{ item.id }}</td><td>{{ item.broker }}</td><td>{{ item.account_alias or "" }}</td><td>{{ item.original_filename }}</td><td>{{ item.mime_type }}</td><td>{{ item.file_size_bytes }}</td><td>{{ item.status }}</td><td><a class="inline-link" href="/ui/uploads/{{ item.id }}/image" target="_blank" rel="noopener">查看</a></td></tr>
+        <tr><td>{{ item.id }}</td><td>{{ item.broker }}</td><td>{{ item.account_alias or "" }}</td><td><a class="inline-link" href="/ui/uploads/{{ item.id }}/image" target="_blank" rel="noopener">{{ item.original_filename }}</a></td><td>{{ item.mime_type }}</td><td>{{ item.file_size_bytes }}</td><td>{{ item.status }}</td></tr>
       {% else %}
-        <tr><td colspan="8">暂无上传。</td></tr>
+        <tr><td colspan="7">暂无上传。</td></tr>
       {% endfor %}
       </tbody>
     </table>
