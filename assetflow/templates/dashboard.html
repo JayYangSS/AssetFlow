@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% macro optional(value) -%}{% if value is not none %}{{ value }}{% endif %}{%- endmacro %}
 {% block title %}总览 - AssetFlow{% endblock %}
 {% block content %}
 <section class="page-header">
@@ -10,17 +11,32 @@
   <article class="card"><span>持仓币种</span><strong>{{ summary.position_value_by_currency | length }}</strong></article>
   <article class="card"><span>最近交易</span><strong>{{ summary.recent_transactions | length }}</strong></article>
 </section>
+<section class="panel">
+  <h2>资产汇总</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>币种</th><th>持仓市值</th><th>现金余额</th><th>合计资产</th></tr></thead>
+      <tbody>
+      {% for item in summary.asset_totals %}
+        <tr><td>{{ item.currency }}</td><td>{{ item.position_value }}</td><td>{{ item.cash_balance }}</td><td>{{ item.total_assets }}</td></tr>
+      {% else %}
+        <tr><td colspan="4">暂无资产数据。</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
 <section class="grid-two">
   <article class="panel">
     <h2>最近上传</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>ID</th><th>券商</th><th>文件</th><th>状态</th><th>时间</th></tr></thead>
+        <thead><tr><th>ID</th><th>券商</th><th>文件</th><th>状态</th><th>时间</th><th>操作</th></tr></thead>
         <tbody>
         {% for item in summary.recent_uploads %}
-          <tr><td>{{ item.id }}</td><td>{{ item.broker }}</td><td>{{ item.original_filename }}</td><td>{{ item.status }}</td><td>{{ item.created_at }}</td></tr>
+          <tr><td>{{ item.id }}</td><td>{{ item.broker }}</td><td>{{ item.original_filename }}</td><td>{{ item.status }}</td><td>{{ item.created_at }}</td><td><a class="inline-link" href="/ui/uploads/{{ item.id }}/image" target="_blank" rel="noopener">查看</a></td></tr>
         {% else %}
-          <tr><td colspan="5">暂无上传。</td></tr>
+          <tr><td colspan="6">暂无上传。</td></tr>
         {% endfor %}
         </tbody>
       </table>
@@ -30,12 +46,12 @@
     <h2>最近交易</h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>日期</th><th>代码</th><th>类型</th><th>数量</th><th>现金变动</th></tr></thead>
+        <thead><tr><th>日期</th><th>代码</th><th>名称</th><th>类型</th><th>数量</th><th>现金变动</th></tr></thead>
         <tbody>
         {% for item in summary.recent_transactions %}
-          <tr><td>{{ item.trade_date }}</td><td>{{ item.symbol }}</td><td>{{ item.trade_type }}</td><td>{{ item.quantity }}</td><td>{{ item.net_amount }} {{ item.currency }}</td></tr>
+          <tr><td>{{ item.trade_date }}</td><td>{{ item.symbol }}</td><td>{{ optional(item.security_name) }}</td><td>{{ item.trade_type }}</td><td>{{ item.quantity }}</td><td>{{ item.net_amount }} {{ item.currency }}</td></tr>
         {% else %}
-          <tr><td colspan="5">暂无交易。</td></tr>
+          <tr><td colspan="6">暂无交易。</td></tr>
         {% endfor %}
         </tbody>
       </table>

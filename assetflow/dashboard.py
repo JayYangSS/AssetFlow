@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 from assetflow.cash_movements import CASH_MOVEMENT_TYPES
 from assetflow.models import CashSnapshot, CandidateTransaction, PositionSnapshot, Transaction, Upload
 from assetflow.position_snapshots import hide_shifted_current_cost_fields
+from assetflow.returns import RETURN_TRADE_TYPES, summarize_returns
 
 
 CASH_MOVEMENT_TYPE_VALUES = tuple(sorted(CASH_MOVEMENT_TYPES))
@@ -15,6 +16,33 @@ CASH_MOVEMENT_TYPE_VALUES = tuple(sorted(CASH_MOVEMENT_TYPES))
 
 def _decimal_map_to_strings(values: dict[str, Decimal]) -> dict[str, str]:
     return {key: str(value) for key, value in values.items()}
+
+
+def _decimal_to_string(value: Decimal) -> str:
+    return str(value)
+
+
+def _return_decimal_to_string(value: Decimal) -> str:
+    return str(value.quantize(Decimal("0.000001")))
+
+
+def _asset_totals_payload(
+    cash_by_currency: dict[str, Decimal],
+    position_value_by_currency: dict[str, Decimal],
+) -> list[dict[str, str]]:
+    payload = []
+    for currency in sorted(set(cash_by_currency) | set(position_value_by_currency)):
+        cash_balance = cash_by_currency.get(currency, Decimal("0"))
+        position_value = position_value_by_currency.get(currency, Decimal("0"))
+        payload.append(
+            {
+                "currency": currency,
+                "position_value": _decimal_to_string(position_value),
+                "cash_balance": _decimal_to_string(cash_balance),
+                "total_assets": _decimal_to_string(position_value + cash_balance),
+            }
+        )
+    return payload
 
 
 def _latest_positions(session: Session) -> list[PositionSnapshot]:
@@ -147,6 +175,7 @@ def dashboard_summary(session: Session) -> dict[str, object]:
         "pending_review_count": pending_review_count,
         "cash_by_currency": _decimal_map_to_strings(cash_by_currency),
         "position_value_by_currency": _decimal_map_to_strings(position_value_by_currency),
+        "asset_totals": _asset_totals_payload(cash_by_currency, position_value_by_currency),
         "recent_transactions": recent_transactions,
         "recent_uploads": recent_uploads,
     }
@@ -175,6 +204,40 @@ def list_transactions(
     if date_to:
         query = query.where(Transaction.trade_date <= date_to)
     return session.exec(query.order_by(Transaction.trade_date.desc(), Transaction.created_at.desc()).limit(limit)).all()
+
+
+def transaction_profit_summary(
+    session: Session,
+    *,
+    currency: str | None = None,
+    symbol: str | None = None,
+) -> list[dict[str, object]]:
+    query = select(Transaction).where(Transaction.trade_type.in_(RETURN_TRADE_TYPES))
+    if currency:
+        query = query.where(Transaction.currency == currency)
+    if symbol:
+        query = query.where(Transaction.symbol == symbol)
+    transactions = session.exec(
+        query.order_by(Transaction.trade_date, Transaction.trade_time, Transaction.created_at, Transaction.id)
+    ).all()
+    return [_return_summary_payload(summary) for summary in summarize_returns(transactions)]
+
+
+def _return_summary_payload(summary) -> dict[str, object]:
+    values = summary.as_dict()
+    return {
+        "currency": values["currency"],
+        "total_return": _return_decimal_to_string(values["total_return"]),
+        "realized_pnl": _return_decimal_to_string(values["realized_pnl"]),
+        "dividends": _return_decimal_to_string(values["dividends"]),
+        "extra_fees": _return_decimal_to_string(values["extra_fees"]),
+        "sell_proceeds": _return_decimal_to_string(values["sell_proceeds"]),
+        "matched_cost": _return_decimal_to_string(values["matched_cost"]),
+        "sell_quantity": _return_decimal_to_string(values["sell_quantity"]),
+        "unmatched_quantity": _decimal_to_string(values["unmatched_quantity"]),
+        "transaction_count": values["transaction_count"],
+        "incomplete_count": values["incomplete_count"],
+    }
 
 
 def list_cash_movements(

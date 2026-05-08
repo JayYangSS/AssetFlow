@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Callable
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session
@@ -19,16 +19,17 @@ from assetflow.dashboard import (
     list_cash_movements,
     list_transactions,
     recent_uploads,
+    transaction_profit_summary,
 )
 from assetflow.domain import SUPPORTED_CURRENCIES, TEMPLATE_TRADE_TYPES, build_dedupe_key
 from assetflow.exporters.xlsx_template import export_transactions_to_template
 from assetflow.export_paths import resolve_export_output_path
 from assetflow.ledger import ACTIONABLE_REVIEW_STATUSES, confirm_candidate, ignore_candidate
-from assetflow.models import CandidateTransaction, PositionSnapshot, Transaction
+from assetflow.models import CandidateTransaction, PositionSnapshot, Transaction, Upload
 from assetflow.position_snapshots import complete_position_value_triplet
 from assetflow.transaction_costs import estimate_transaction_costs
 from assetflow.upload_pipeline import process_uploaded_image
-from assetflow.uploads import InvalidUploadError
+from assetflow.uploads import ALLOWED_CONTENT_TYPES, InvalidUploadError
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -78,6 +79,17 @@ def _parse_optional_time(value: str | None, label: str) -> time | None:
 
 def create_ui_router(settings: Settings, get_session: Callable):
     router = APIRouter()
+
+    def resolve_upload_image_path(upload: Upload) -> Path:
+        upload_dir = settings.upload_dir.resolve()
+        image_path = Path(upload.image_path).resolve()
+        try:
+            image_path.relative_to(upload_dir)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail="Upload image not found") from exc
+        if not image_path.is_file():
+            raise HTTPException(status_code=404, detail="Upload image not found")
+        return image_path
 
     def render_review_response(request: Request, db: Session, status: str | None = None, error: str | None = None):
         query = select(CandidateTransaction)
@@ -202,6 +214,20 @@ def create_ui_router(settings: Settings, get_session: Callable):
                 "error": None,
                 "uploads": recent_uploads(db),
             },
+        )
+
+    @router.get("/ui/uploads/{upload_id}/image")
+    def upload_image(upload_id: int, db: Session = Depends(get_session)):
+        upload = db.get(Upload, upload_id)
+        if upload is None:
+            raise HTTPException(status_code=404, detail="Upload not found")
+        if upload.mime_type not in ALLOWED_CONTENT_TYPES:
+            raise HTTPException(status_code=404, detail="Upload image not found")
+        return FileResponse(
+            resolve_upload_image_path(upload),
+            media_type=upload.mime_type,
+            filename=upload.original_filename,
+            content_disposition_type="inline",
         )
 
     @router.get("/ui/review")
@@ -336,6 +362,7 @@ def create_ui_router(settings: Settings, get_session: Callable):
                 "settings": settings,
                 "active": "transactions",
                 "transactions": list_transactions(db, currency=currency, symbol=symbol),
+                "return_summaries": transaction_profit_summary(db, currency=currency, symbol=symbol),
                 "currency": currency or "",
                 "symbol": symbol or "",
             },
