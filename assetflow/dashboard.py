@@ -255,6 +255,23 @@ def list_cash_movements(
     ).all()
 
 
+def cash_movement_summary(session: Session) -> list[dict[str, object]]:
+    totals: dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
+    counts: dict[str, int] = defaultdict(int)
+    transactions = session.exec(select(Transaction).where(Transaction.trade_type.in_(CASH_MOVEMENT_TYPE_VALUES))).all()
+    for transaction in transactions:
+        totals[transaction.currency] += transaction.net_amount
+        counts[transaction.currency] += 1
+    return [
+        {
+            "currency": currency,
+            "cumulative_cash_change": _decimal_to_string(totals[currency]),
+            "transaction_count": counts[currency],
+        }
+        for currency in sorted(totals)
+    ]
+
+
 def latest_positions(session: Session) -> list[PositionSnapshot]:
     return _latest_positions(session)
 

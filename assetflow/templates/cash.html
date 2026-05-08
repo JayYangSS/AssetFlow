@@ -19,6 +19,21 @@
 </form>
 {% if result %}<section class="panel"><h2>记录结果</h2><p>{{ result }}</p></section>{% endif %}
 {% if error %}<section class="panel error"><h2>记录失败</h2><p>{{ error }}</p></section>{% endif %}
+<section class="panel">
+  <h2>累计现金变动</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>币种</th><th>累计现金变动</th><th>记录数</th></tr></thead>
+      <tbody>
+      {% for item in cash_summary %}
+        <tr><td>{{ item.currency }}</td><td>{{ item.cumulative_cash_change }}</td><td>{{ item.transaction_count }}</td></tr>
+      {% else %}
+        <tr><td colspan="3">暂无累计现金变动。</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
 <section class="page-header"><h2>已确认资金流水</h2></section>
 <div class="table-wrap">
   <table>

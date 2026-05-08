@@ -648,6 +648,76 @@ def test_ui_routes_confirmed_cash_movements_to_cash_page(settings, session) -> N
     assert "7000.000000" in cash_response.text
 
 
+def test_ui_cash_page_renders_cumulative_cash_change_summary(settings, session) -> None:
+    for tx in [
+        Transaction(
+            broker="htsc_global",
+            symbol="CASH",
+            security_name="Cash",
+            trade_type="cash_in",
+            trade_date=date(2026, 5, 1),
+            quantity=Decimal("0"),
+            price=Decimal("0"),
+            net_amount=Decimal("1000"),
+            currency="HKD",
+            dedupe_key="ui-cash-summary-hkd-in",
+            confidence=1.0,
+        ),
+        Transaction(
+            broker="htsc_global",
+            symbol="CASH",
+            security_name="Cash",
+            trade_type="cash_out",
+            trade_date=date(2026, 5, 2),
+            quantity=Decimal("0"),
+            price=Decimal("0"),
+            net_amount=Decimal("-300"),
+            currency="HKD",
+            dedupe_key="ui-cash-summary-hkd-out",
+            confidence=1.0,
+        ),
+        Transaction(
+            broker="htsc_global",
+            symbol="CASH",
+            security_name="Cash",
+            trade_type="fee",
+            trade_date=date(2026, 5, 3),
+            quantity=Decimal("0"),
+            price=Decimal("0"),
+            net_amount=Decimal("-5"),
+            currency="USD",
+            dedupe_key="ui-cash-summary-usd-fee",
+            confidence=1.0,
+        ),
+        Transaction(
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            trade_type="buy",
+            trade_date=date(2026, 5, 4),
+            quantity=Decimal("100"),
+            price=Decimal("80"),
+            net_amount=Decimal("-8000"),
+            currency="HKD",
+            dedupe_key="ui-cash-summary-stock-buy",
+            confidence=0.95,
+        ),
+    ]:
+        session.add(tx)
+    session.commit()
+    client = TestClient(create_app(settings=settings, session=session))
+
+    response = client.get("/ui/cash")
+
+    assert response.status_code == 200
+    assert "累计现金变动" in response.text
+    assert "记录数" in response.text
+    assert "700.000000" in response.text
+    assert "-5.000000" in response.text
+    assert "-8000.000000" not in response.text
+
+
 def test_ui_cash_movement_form_renders_error_for_invalid_amount(settings, session) -> None:
     client = TestClient(create_app(settings=settings, session=session))
 

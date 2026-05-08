@@ -606,3 +606,72 @@ def test_transaction_profit_summary_returns_dividends_fees_and_fifo_pnl(settings
             "incomplete_count": 0,
         }
     ]
+
+
+def test_cash_movement_summary_groups_cumulative_cash_change_by_currency(settings, session) -> None:
+    for tx in [
+        Transaction(
+            broker="htsc_global",
+            symbol="CASH",
+            security_name="Cash",
+            trade_type="cash_in",
+            trade_date=date(2026, 5, 1),
+            quantity=Decimal("0"),
+            price=Decimal("0"),
+            net_amount=Decimal("1000"),
+            currency="HKD",
+            dedupe_key="cash-summary-hkd-in",
+            confidence=1.0,
+        ),
+        Transaction(
+            broker="htsc_global",
+            symbol="CASH",
+            security_name="Cash",
+            trade_type="cash_out",
+            trade_date=date(2026, 5, 2),
+            quantity=Decimal("0"),
+            price=Decimal("0"),
+            net_amount=Decimal("-300"),
+            currency="HKD",
+            dedupe_key="cash-summary-hkd-out",
+            confidence=1.0,
+        ),
+        Transaction(
+            broker="htsc_global",
+            symbol="CASH",
+            security_name="Cash",
+            trade_type="fee",
+            trade_date=date(2026, 5, 3),
+            quantity=Decimal("0"),
+            price=Decimal("0"),
+            net_amount=Decimal("-5"),
+            currency="USD",
+            dedupe_key="cash-summary-usd-fee",
+            confidence=1.0,
+        ),
+        Transaction(
+            broker="htsc_global",
+            market="HK",
+            symbol="00700",
+            security_name="Tencent",
+            trade_type="buy",
+            trade_date=date(2026, 5, 4),
+            quantity=Decimal("100"),
+            price=Decimal("80"),
+            net_amount=Decimal("-8000"),
+            currency="HKD",
+            dedupe_key="cash-summary-stock-buy",
+            confidence=0.95,
+        ),
+    ]:
+        session.add(tx)
+    session.commit()
+
+    from assetflow.dashboard import cash_movement_summary
+
+    summaries = cash_movement_summary(session)
+
+    assert summaries == [
+        {"currency": "HKD", "cumulative_cash_change": "700.000000", "transaction_count": 2},
+        {"currency": "USD", "cumulative_cash_change": "-5.000000", "transaction_count": 1},
+    ]

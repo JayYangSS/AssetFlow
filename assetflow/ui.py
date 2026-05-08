@@ -13,6 +13,7 @@ from sqlmodel import select
 from assetflow.cash_movements import create_cash_movement
 from assetflow.config import Settings
 from assetflow.dashboard import (
+    cash_movement_summary,
     dashboard_summary,
     latest_cash,
     latest_positions,
@@ -436,6 +437,7 @@ def create_ui_router(settings: Settings, get_session: Callable):
                 "active": "cash",
                 "cash_items": latest_cash(db),
                 "cash_movements": list_cash_movements(db),
+                "cash_summary": cash_movement_summary(db),
                 "result": None,
                 "error": None,
             },
@@ -471,6 +473,7 @@ def create_ui_router(settings: Settings, get_session: Callable):
                     "active": "cash",
                     "cash_items": latest_cash(db),
                     "cash_movements": list_cash_movements(db),
+                    "cash_summary": cash_movement_summary(db),
                     "result": None,
                     "error": str(exc),
                 },
